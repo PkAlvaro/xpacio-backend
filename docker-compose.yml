@@ -1,4 +1,12 @@
 services:
+  frontend:
+    build:
+      context: ../find-book
+      args:
+        VITE_API_URL: /api/v1
+    networks:
+      - xpacio
+
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -8,6 +16,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      frontend:
+        condition: service_started
     networks:
       - xpacio
 
