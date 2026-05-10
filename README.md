@@ -66,14 +66,14 @@ Abre en el browser:
 
 | URL | Descripción |
 |-----|-------------|
-| `http://localhost:8000/docs` | Swagger UI — prueba todos los endpoints |
-| `http://localhost:8000/redoc` | ReDoc — documentación legible |
-| `http://localhost:8000/openapi.json` | Schema OpenAPI (importar a Postman) |
+| `http://localhost/docs` | Swagger UI — prueba todos los endpoints |
+| `http://localhost/redoc` | ReDoc — documentación legible |
+| `http://localhost/openapi.json` | Schema OpenAPI (importar a Postman) |
 
 ### Importar a Postman
 
 1. Postman → **Import** → **Link**
-2. Pegar: `http://localhost:8000/openapi.json`
+2. Pegar: `http://localhost/openapi.json`
 3. Genera la colección completa automáticamente
 
 ---
@@ -88,31 +88,66 @@ Abre en el browser:
 | `POST` | `/api/v1/auth/refresh` | Renovar access token |
 | `POST` | `/api/v1/auth/logout` | Invalidar tokens |
 | `GET` | `/api/v1/auth/me` | Perfil del usuario autenticado |
-| `GET` | `/api/v1/spaces` | Listar espacios (filtros: ciudad, tipo, precio) |
-| `POST` | `/api/v1/spaces` | Crear espacio (requiere rol provider) |
+| `GET` | `/api/v1/spaces` | Listar espacios (filtros: ciudad, tipo, precio, ubicación) |
+| `POST` | `/api/v1/spaces` | Crear espacio (requiere rol `provider` o `admin`) |
 | `GET` | `/api/v1/spaces/{id}` | Detalle de espacio |
-| `PATCH` | `/api/v1/spaces/{id}` | Editar espacio |
-| `DELETE` | `/api/v1/spaces/{id}` | Eliminar espacio |
-| `GET/PUT` | `/api/v1/spaces/{id}/schedules` | Horarios del espacio |
+| `PATCH` | `/api/v1/spaces/{id}` | Editar espacio (solo dueño o admin) |
+| `DELETE` | `/api/v1/spaces/{id}` | Desactivar espacio (solo dueño o admin) |
+| `PUT` | `/api/v1/spaces/{id}/schedules` | Configurar horarios semanales |
+| `GET` | `/api/v1/spaces/{id}/schedules` | Ver horarios configurados |
 | `GET` | `/api/v1/spaces/{id}/availability` | Slots disponibles por fecha |
 | `POST` | `/api/v1/reservations` | Crear reserva |
-| `GET` | `/api/v1/reservations` | Mis reservas |
+| `GET` | `/api/v1/reservations` | Mis reservas (filtro por estado) |
 | `GET` | `/api/v1/reservations/{id}` | Detalle de reserva |
 | `POST` | `/api/v1/reservations/{id}/cancel` | Cancelar reserva |
 | `POST` | `/api/v1/payments/initiate` | Iniciar pago Transbank |
-| `POST` | `/api/v1/payments/confirm` | Confirmar pago (webhook) |
+| `POST` | `/api/v1/payments/confirm` | Confirmar pago (webhook Transbank) |
 | `GET` | `/api/v1/payments/{id}` | Estado de pago |
+| `PATCH` | `/api/v1/admin/users/{id}/role` | Cambiar rol de usuario (solo admin) |
 
 ---
 
-## Flujo de prueba básico (Swagger UI)
+## Flujo de prueba completo (Swagger UI)
+
+Abrir `http://localhost/docs`
+
+### Flujo cliente → reserva → pago
 
 1. **Registrar usuario:** `POST /api/v1/auth/register`
+   ```json
+   { "name": "Test User", "email": "test@test.com", "password": "seguro123" }
+   ```
 2. **Login:** `POST /api/v1/auth/login` → copiar `access_token`
 3. Click **Authorize** (candado arriba a la derecha) → pegar `Bearer <token>`
-4. **Crear espacio:** `POST /api/v1/spaces`
-5. **Ver disponibilidad:** `GET /api/v1/spaces/{id}/availability?date=2026-05-15`
+4. **Ver espacios disponibles:** `GET /api/v1/spaces`
+5. **Ver disponibilidad:** `GET /api/v1/spaces/{id}/availability?date=2026-05-20`
 6. **Reservar:** `POST /api/v1/reservations`
+7. **Iniciar pago:** `POST /api/v1/payments/initiate` → obtener `webpay_url`
+8. Visitar `webpay_url` → usar credenciales de integración Transbank (ver abajo)
+
+### Flujo admin → crear espacio
+
+1. El primer admin debe crearse directo en BD:
+   ```sql
+   UPDATE users SET role='admin' WHERE email='tu@email.com';
+   ```
+2. **Login** con cuenta admin → **Authorize**
+3. **Promover usuario a provider:** `PATCH /api/v1/admin/users/{user_id}/role`
+   ```json
+   { "role": "provider" }
+   ```
+4. **Login** con cuenta provider → **Authorize**
+5. **Crear espacio:** `POST /api/v1/spaces` (el perfil de proveedor se crea automáticamente)
+6. **Configurar horarios:** `PUT /api/v1/spaces/{id}/schedules`
+
+### Credenciales Transbank (ambiente integración)
+
+| Campo | Valor |
+|-------|-------|
+| Número de tarjeta | `4051 8856 0044 6623` |
+| CVV | `123` |
+| RUT | `11.111.111-1` |
+| Clave | `123` |
 
 ---
 
@@ -158,7 +193,7 @@ Abre en el browser:
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ HTTP Layer (Routers)                                           │
-│   /auth  ·  /spaces  ·  /reservations  ·  /payments           │
+│   /auth  ·  /spaces  ·  /reservations  ·  /payments  ·/admin  │
 └────────────────────────┬───────────────────────────────────────┘
                          │
 ┌────────────────────────▼───────────────────────────────────────┐
@@ -327,7 +362,8 @@ xpacio-backend/
     │   ├── auth.py
     │   ├── spaces.py
     │   ├── reservations.py
-    │   └── payments.py
+    │   ├── payments.py
+    │   └── admin.py             # Gestión de roles (solo admin)
     │
     ├── services/                # Lógica de negocio
     │   ├── auth_service.py
