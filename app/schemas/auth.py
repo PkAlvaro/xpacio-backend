@@ -7,7 +7,6 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: UserRole = UserRole.CLIENT
     phone: str | None = None
 
     @field_validator("password")
@@ -23,6 +22,10 @@ class RegisterRequest(BaseModel):
         if not v.strip():
             raise ValueError("El nombre no puede estar vacío")
         return v.strip()
+
+
+class ChangeRoleRequest(BaseModel):
+    role: UserRole
 
 
 class LoginRequest(BaseModel):

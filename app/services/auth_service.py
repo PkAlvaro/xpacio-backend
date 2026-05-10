@@ -39,14 +39,10 @@ async def register_user(
         name=data.name,
         email=data.email,
         password_hash=hashed,
-        role=data.role,
+        role=UserRole.CLIENT,
         phone=data.phone,
     )
     session.add(user)
-
-    if data.role == UserRole.PROVIDER:
-        provider = Provider(id=uuid.uuid4(), user_id=user.id)
-        session.add(provider)
 
     try:
         await session.commit()
