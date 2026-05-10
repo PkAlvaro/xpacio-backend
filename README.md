@@ -110,17 +110,251 @@ Abre en el browser:
 
 ---
 
-## Arquitectura
+## Diagramas de Arquitectura
+
+### 1. Arquitectura Global del Sistema
 
 ```
-nginx :80
-  └── api (FastAPI) :8000
-        ├── PostgreSQL :5432   — datos principales
-        ├── Redis :6379        — JWT blacklist + caché
-        ├── MinIO :9000        — almacenamiento de imágenes
-        ├── Celery Worker      — tareas asíncronas
-        └── Celery Beat        — tareas periódicas (expiración reservas)
+                       ┌─────────────────────────────────────┐
+                       │  Browser (React Frontend)           │
+                       └──────────────┬──────────────────────┘
+                                      │ HTTPS
+                       ┌──────────────▼──────────────────────┐
+                       │ Docker Compose Environment           │
+                       │                                      │
+                       │  ┌─────────────────────────────────┐ │
+                       │  │  Nginx Reverse Proxy (:80/:443) │ │
+                       │  └────────────────┬────────────────┘ │
+                       │                   │                   │
+        ┌──────────────┼───────────────────┼───────────────┐   │
+        │              │                   │               │   │
+    ┌───▼───┐    ┌─────▼─────┐      ┌─────▼────┐    ┌────▼─┐  │
+    │FastAPI│    │PostgreSQL │      │  Redis   │    │MinIO │  │
+    │ :8000 │    │   :5432   │      │  :6379   │    │:9000 │  │
+    └───┬───┘    └───────────┘      └──────────┘    └──────┘  │
+        │                                                       │
+    ┌───▼──────────────┐                                        │
+    │  Celery Worker   │  ← tareas asíncronas                  │
+    │  Celery Beat     │  ← scheduler (cada 5 min)             │
+    └──────────────────┘                                        │
+                       └──────────────────────────────────────┘
+                       ┌──────────────────────────────────────┐
+                       │  Servicios Externos                  │
+                       │  • Nominatim (geocoding)             │
+                       │  • Transbank WebpayPlus (pagos)      │
+                       └──────────────────────────────────────┘
 ```
+
+---
+
+### 2. Arquitectura en Capas (FastAPI)
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ HTTP Layer (Routers)                                           │
+│   /auth  ·  /spaces  ·  /reservations  ·  /payments           │
+└────────────────────────┬───────────────────────────────────────┘
+                         │
+┌────────────────────────▼───────────────────────────────────────┐
+│ Dependency Injection                                           │
+│   get_db()  ·  get_current_user()  ·  require_role()          │
+└────────────────────────┬───────────────────────────────────────┘
+                         │
+┌────────────────────────▼───────────────────────────────────────┐
+│ Service Layer (Business Logic)                                 │
+│   AuthService  ·  SpaceService  ·  ReservationService         │
+│   PaymentService  ·  GeocodingService  ·  AvailabilityService │
+└────────────────────────┬───────────────────────────────────────┘
+                         │
+┌────────────────────────▼───────────────────────────────────────┐
+│ Data Access Layer                                              │
+│   SQLAlchemy ORM Models  ·  Pydantic Schemas                  │
+│   PostgreSQL (asyncpg)  ·  Redis                              │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3. Flujo de Autenticación
+
+```
+                    USUARIO
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+     [REGISTER]    [LOGIN]       [REFRESH]
+         │             │             │
+         │      ┌──────▼──────┐      │
+         │      │ /auth/login │      │
+         │      └──────┬──────┘      │
+         │             │             │
+    ┌────▼─────────────▼─────────────▼────┐
+    │  PostgreSQL — users table            │
+    │  • Hashear password (bcrypt)         │
+    │  • Verificar credenciales            │
+    └─────────────────┬────────────────────┘
+                      │
+    ┌─────────────────▼────────────────────┐
+    │  Redis                               │
+    │  SET jti_blacklist (logout)          │
+    │  TTL = tiempo restante del token     │
+    └─────────────────┬────────────────────┘
+                      │
+    ┌─────────────────▼────────────────────┐
+    │  Respuesta al cliente                │
+    │  • access_token  (JWT, 15 min)       │
+    │  • refresh_token (JWT, 7 días)       │
+    └──────────────────────────────────────┘
+```
+
+---
+
+### 4. Flujo de Reserva y Pago
+
+```
+Paso 1 — CREAR RESERVA
+  │
+  ├─→ Verificar conflictos (mismo espacio + fecha + horario superpuesto)
+  │     └─→ Constraint PostgreSQL: EXCLUDE USING gist (int4range WITH &&)
+  ├─→ INSERT reservations (status = 'pending')
+  └─→ Retorna reservation_id + total
+
+Paso 2 — INICIAR PAGO
+  │
+  ├─→ POST /api/v1/payments/initiate
+  ├─→ Transbank.Transaction.create(monto, return_url)
+  └─→ Retorna webpay_url → redirigir al usuario
+
+Paso 3 — USUARIO PAGA EN TRANSBANK
+  │
+  ├─→ Formulario de pago Transbank
+  └─→ Webhook a POST /api/v1/payments/confirm?token_ws=...
+
+Paso 4 — CONFIRMAR PAGO (Webhook)
+  │
+  ├─→ Transbank.Transaction.commit(token)
+  ├─→ SI response_code == 0:
+  │     ├─→ payments.status = 'paid'
+  │     └─→ reservations.status = 'confirmed'
+  └─→ SI falla:
+        ├─→ payments.status = 'failed'
+        └─→ reservations.status = 'cancelled'
+
+Paso 5 — TRANSICIONES AUTOMÁTICAS (Celery Beat)
+  │
+  ├─→ pending sin pago > 15 min   → expired
+  ├─→ confirmed + start_time <= now → active
+  └─→ active + end_time <= now    → finished
+```
+
+---
+
+### 5. Modelo de Datos (ERD)
+
+```
+users
+├── id (UUID PK)
+├── name, email (UNIQUE), password_hash
+├── role: client | provider | admin
+│
+├──< providers (1:1)
+│     └── bank_rut, verification_status
+│
+├──< spaces (1:N via provider_id)
+│     ├── name, description, type, address, city
+│     ├── lat, lng (geocodificado por Nominatim)
+│     ├── price_per_hour, capacity, is_active
+│     │
+│     ├──< space_schedules (horarios semanales)
+│     │     └── day_of_week, open_time, close_time, slot_minutes
+│     │
+│     ├──< space_images
+│     └──< space_amenities
+│
+└──< reservations (1:N via client_id)
+      ├── space_id (FK)
+      ├── date, start_time, end_time
+      ├── total, status: pending|confirmed|active|finished|cancelled|expired
+      │
+      └──< payments (1:1)
+            ├── token (Transbank), buy_order
+            ├── amount, status: pending|paid|failed|refunded
+            └── raw_response (JSONB)
+```
+
+---
+
+### 6. Estructura del Proyecto
+
+```
+xpacio-backend/
+├── docker-compose.yml           # Producción (6 servicios)
+├── docker-compose.override.yml  # Dev: hot-reload, puertos expuestos
+├── Dockerfile
+├── nginx/
+│   └── nginx.conf               # Reverse proxy
+├── alembic/
+│   └── versions/
+│       └── 0001_initial_schema.py
+│
+└── app/
+    ├── main.py                  # FastAPI app + lifespan + CORS
+    ├── config.py                # Pydantic Settings (env vars)
+    ├── database.py              # SQLAlchemy async engine
+    ├── dependencies.py          # get_db, get_current_user, require_role
+    ├── constants.py             # Enums: UserRole, ReservationStatus…
+    ├── exceptions.py            # DomainException + handlers
+    │
+    ├── models/                  # SQLAlchemy ORM
+    │   ├── user.py
+    │   ├── space.py
+    │   ├── reservation.py
+    │   └── payment.py
+    │
+    ├── schemas/                 # Pydantic (request/response)
+    │   ├── auth.py
+    │   ├── space.py
+    │   ├── reservation.py
+    │   └── payment.py
+    │
+    ├── routers/                 # Endpoints HTTP
+    │   ├── auth.py
+    │   ├── spaces.py
+    │   ├── reservations.py
+    │   └── payments.py
+    │
+    ├── services/                # Lógica de negocio
+    │   ├── auth_service.py
+    │   ├── space_service.py
+    │   ├── availability_service.py
+    │   ├── reservation_service.py
+    │   ├── payment_service.py
+    │   ├── geocoding_service.py
+    │   └── redis_service.py
+    │
+    ├── utils/
+    │   └── time_utils.py        # Timezone Chile (America/Santiago)
+    │
+    └── workers/
+        ├── celery_app.py
+        ├── beat_schedule.py
+        └── tasks/
+            ├── reservation_tasks.py
+            └── payment_tasks.py
+```
+
+---
+
+### 7. Integraciones Externas
+
+| Servicio | Propósito | Detalles |
+|----------|-----------|----------|
+| **Nominatim** | Geocoding | Cache Redis 30 días, límite 1 req/seg |
+| **Transbank** | Pagos | WebpayPlus SDK, env `integration` gratis |
+| **PostgreSQL** | Datos principales | Driver async `asyncpg` |
+| **Redis** | Caché + JWT blacklist | TTL por tipo de dato |
+| **MinIO** | Imágenes de espacios | Compatible S3 |
+| **Celery** | Tareas background | Expiración reservas, transiciones |
 
 ---
 
@@ -141,6 +375,12 @@ docker compose down -v
 
 # Acceder a la DB directamente
 docker compose exec db psql -U xpacio -d xpacio
+
+# Ejecutar migraciones
+docker compose exec api alembic upgrade head
+
+# Ver historial de migraciones
+docker compose exec api alembic history
 ```
 
 ---
