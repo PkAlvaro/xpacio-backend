@@ -20,6 +20,27 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
     "/users/{user_id}/role",
     response_model=dict,
     dependencies=[Depends(require_role(UserRole.ADMIN))],
+    summary="Cambiar rol de un usuario",
+    description="""
+Cambia el rol de cualquier usuario del sistema. Solo accesible para administradores.
+
+Roles disponibles:
+- `client`: usuario normal, puede buscar y reservar espacios
+- `provider`: puede crear y gestionar sus propios espacios de arriendo
+- `admin`: acceso total al sistema
+
+**Reglas:**
+- No se puede promover a `admin` por esta vía (requiere acceso directo a BD)
+- Al promover a `provider`, se crea automáticamente su perfil de proveedor si no existe
+
+**Cómo crear el primer admin:**
+Ejecutar directamente en la base de datos:
+```sql
+UPDATE users SET role='admin' WHERE email='tu@email.com';
+```
+
+**Requiere autenticación con rol `admin`.**
+""",
 )
 async def change_user_role(
     user_id: uuid.UUID,
@@ -37,7 +58,6 @@ async def change_user_role(
     old_role = user.role
     user.role = data.role
 
-    # Si pasa a provider, crear registro Provider si no existe
     if data.role == UserRole.PROVIDER and old_role != UserRole.PROVIDER:
         existing = await session.execute(
             select(Provider).where(Provider.user_id == user.id)
