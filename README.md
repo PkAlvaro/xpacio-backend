@@ -37,7 +37,7 @@ Editar `.env` con tus valores. Las variables mínimas para desarrollo local ya t
 docker compose up --build -d
 ```
 
-Levanta 6 servicios: `api`, `db`, `redis`, `minio`, `worker`, `beat`.
+Levanta 8 servicios: `frontend`, `nginx`, `api`, `db`, `redis`, `minio`, `worker`, `beat`.
 
 ### 4. Migrar base de datos
 
@@ -48,9 +48,15 @@ docker compose exec api alembic upgrade head
 ### 5. Verificar
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost/health
 # {"status":"healthy","checks":{"db":"ok","redis":"ok"}}
 ```
+
+| URL | Descripción |
+|-----|-------------|
+| `http://localhost/` | Frontend React |
+| `http://localhost/api/v1/...` | Backend API |
+| `http://localhost/docs` | Swagger UI |
 
 ---
 
