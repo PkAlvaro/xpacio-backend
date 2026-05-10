@@ -17,7 +17,7 @@ class Payment(Base, TimestampMixin):
     buy_order: Mapped[str] = mapped_column(String(26), nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[PaymentStatus] = mapped_column(
-        SAEnum(PaymentStatus, name="payment_status"),
+        SAEnum(PaymentStatus, name="payment_status", values_callable=lambda x: [e.value for e in x]),
         default=PaymentStatus.INITIATED,
         nullable=False,
     )

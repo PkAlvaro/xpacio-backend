@@ -17,7 +17,7 @@ class Provider(Base, TimestampMixin):
     bank_account: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True)
     verification_status: Mapped[VerificationStatus] = mapped_column(
-        SAEnum(VerificationStatus, name="verification_status"),
+        SAEnum(VerificationStatus, name="verification_status", values_callable=lambda x: [e.value for e in x]),
         default=VerificationStatus.PENDING,
         nullable=False,
     )

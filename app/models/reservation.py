@@ -22,7 +22,7 @@ class Reservation(Base, TimestampMixin):
     service_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[ReservationStatus] = mapped_column(
-        SAEnum(ReservationStatus, name="reservation_status"),
+        SAEnum(ReservationStatus, name="reservation_status", values_callable=lambda x: [e.value for e in x]),
         default=ReservationStatus.PENDING,
         nullable=False,
         index=True,

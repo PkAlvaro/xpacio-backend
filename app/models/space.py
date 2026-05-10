@@ -13,7 +13,7 @@ class Space(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     provider_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    type: Mapped[SpaceType] = mapped_column(SAEnum(SpaceType, name="space_type"), nullable=False)
+    type: Mapped[SpaceType] = mapped_column(SAEnum(SpaceType, name="space_type", values_callable=lambda x: [e.value for e in x]), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -22,7 +22,7 @@ class Space(Base, TimestampMixin):
     price_per_hour: Mapped[int] = mapped_column(Integer, nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     cancellation_policy: Mapped[CancellationPolicy] = mapped_column(
-        SAEnum(CancellationPolicy, name="cancellation_policy"),
+        SAEnum(CancellationPolicy, name="cancellation_policy", values_callable=lambda x: [e.value for e in x]),
         default=CancellationPolicy.FLEXIBLE,
         nullable=False,
     )

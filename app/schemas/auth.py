@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel, EmailStr, field_validator
 from app.constants import UserRole
 
@@ -41,7 +42,7 @@ class TokenResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: str
+    id: uuid.UUID
     name: str
     email: str
     role: UserRole
