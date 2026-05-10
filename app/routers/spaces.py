@@ -50,13 +50,15 @@ async def create_space(
     redis: aioredis.Redis = Depends(get_redis),
     user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
 ):
+    import uuid as _uuid
     from sqlalchemy import select
     from app.models.provider import Provider
     result = await session.execute(select(Provider).where(Provider.user_id == user.id))
     provider = result.scalar_one_or_none()
     if not provider:
-        from app.exceptions import DomainException
-        raise DomainException("Perfil de proveedor no encontrado", 404)
+        provider = Provider(id=_uuid.uuid4(), user_id=user.id)
+        session.add(provider)
+        await session.flush()
 
     space = await space_service.create_space(data, provider.id, session, redis)
     return {"success": True, "data": SpaceResponse.from_orm_with_amenities(space).model_dump()}

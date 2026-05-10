@@ -66,11 +66,16 @@ class SpaceResponse(BaseModel):
     amenities: list[str] = []
     model_config = {"from_attributes": True}
 
+    @field_validator("amenities", mode="before")
+    @classmethod
+    def coerce_amenities(cls, v):
+        if v and hasattr(v[0], "name"):
+            return [a.name for a in v]
+        return v
+
     @classmethod
     def from_orm_with_amenities(cls, space) -> "SpaceResponse":
-        data = cls.model_validate(space)
-        data.amenities = [a.name for a in space.amenities]
-        return data
+        return cls.model_validate(space)
 
 
 class SpaceListItem(BaseModel):
