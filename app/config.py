@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = "http://localhost:8080/reserva/confirmacion?session_id={CHECKOUT_SESSION_ID}"
     STRIPE_CANCEL_URL: str = "http://localhost:8080/reserva/cancelada"
 
+    TRANSBANK_COMMERCE_CODE: str = "597055555532"
+    TRANSBANK_API_KEY: str = "579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C"
+    TRANSBANK_ENV: str = "integration"
+    TRANSBANK_RETURN_URL: str = "http://localhost:8080/reserva/confirmacion"
+
     MINIO_ENDPOINT: str = "minio:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"

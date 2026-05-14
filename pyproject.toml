@@ -21,6 +21,7 @@ dependencies = [
     "redis>=5.0.0",
     "celery>=5.4.0",
     "stripe>=10.0.0",
+    "transbank-sdk>=5.0.0",
     "slowapi>=0.1.9",
     "structlog>=24.4.0",
     "python-multipart>=0.0.9",

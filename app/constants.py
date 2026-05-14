@@ -26,6 +26,11 @@ class PaymentStatus(StrEnum):
     REFUNDED = "refunded"
 
 
+class PaymentProvider(StrEnum):
+    STRIPE = "stripe"
+    TRANSBANK = "transbank"
+
+
 class VerificationStatus(StrEnum):
     PENDING = "pending"
     VERIFIED = "verified"

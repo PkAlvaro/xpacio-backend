@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.models.base import Base, TimestampMixin, new_uuid
-from app.constants import PaymentStatus
+from app.constants import PaymentStatus, PaymentProvider
 
 
 class Payment(Base, TimestampMixin):
@@ -16,6 +16,10 @@ class Payment(Base, TimestampMixin):
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     buy_order: Mapped[str] = mapped_column(String(64), nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider: Mapped[PaymentProvider] = mapped_column(
+        SAEnum(PaymentProvider, name="payment_provider", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     status: Mapped[PaymentStatus] = mapped_column(
         SAEnum(PaymentStatus, name="payment_status", values_callable=lambda x: [e.value for e in x]),
         default=PaymentStatus.INITIATED,
