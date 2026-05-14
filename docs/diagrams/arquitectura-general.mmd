@@ -1,0 +1,43 @@
+flowchart LR
+  subgraph CLIENT["Cliente"]
+    FE["Next.js 14\nTailwind CSS\nReact Query\nZustand"]
+  end
+
+  subgraph DOCKER["Docker Compose — xpacio_network"]
+    subgraph GATEWAY["Contenedor: nginx"]
+      NGINX["Nginx\nReverse Proxy\n:80"]
+    end
+
+    subgraph BACKEND["Contenedor: api"]
+      API["FastAPI\nUvicorn\n:8000"]
+      CELERY["Celery\nWorker"]
+      BEAT["Celery Beat\nScheduler"]
+    end
+
+    subgraph STORAGE["Almacenamiento"]
+      subgraph PGBOX["Contenedor: db"]
+        PG[("PostgreSQL\nusers / spaces\nreservations\npayments / reviews")]
+      end
+      subgraph RDBOX["Contenedor: redis"]
+        REDIS[("Redis\nJWT blacklist\nCelery broker\nGeocode cache")]
+      end
+    end
+  end
+
+  subgraph EXTERNAL["Servicios Externos"]
+    STRIPE["Stripe API\nTarjetas internacionales"]
+    TRANSBANK["Transbank\nWebpayPlus\nTarjetas chilenas"]
+    NOMINATIM["Nominatim OSM\nGeocodificacion"]
+  end
+
+  FE -- "HTTPS" --> NGINX
+  NGINX -- "proxy_pass" --> API
+  API -- "asyncpg ORM" --> PG
+  API -- "JWT blacklist + cache" --> REDIS
+  API -- "checkout session" --> STRIPE
+  API -- "webpay transaction" --> TRANSBANK
+  API -- "geocoding" --> NOMINATIM
+  API -- "enqueue tasks" --> REDIS
+  BEAT -- "trigger cada 30 min" --> CELERY
+  CELERY -- "consume" --> REDIS
+  CELERY -- "reconcile stale payments" --> PG

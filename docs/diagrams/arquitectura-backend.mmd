@@ -1,0 +1,63 @@
+flowchart TD
+  REQ["HTTP Request"]
+
+  subgraph MW["Middlewares"]
+    direction LR
+    CORS["CORSMiddleware"]
+    RATE["RateLimiter slowapi"]
+    EXC["Exception Handlers"]
+  end
+
+  subgraph RT["Routers — API v1"]
+    direction LR
+    R1["/auth\nregistro / login / refresh / me / logout"]
+    R2["/spaces\nCRUD + mine"]
+    R3["/reservations\nCRUD + incoming"]
+    R4["/payments/stripe\ninitiate / webhook"]
+    R5["/payments/transbank\ninitiate / confirm"]
+    R6["/payments\nestado"]
+    R7["/providers\nme / update"]
+    R8["/admin\nusuarios / roles"]
+  end
+
+  subgraph SVC["Services"]
+    direction LR
+    S1["auth_service\njwt_service\npassword_service"]
+    S2["space_service\navailability_service\ngeocoding_service"]
+    S3["reservation_service"]
+    S4["payment_service\nStripe + Transbank"]
+    S5["redis_service"]
+  end
+
+  subgraph MDL["Models — SQLAlchemy ORM"]
+    direction LR
+    M1["User"]
+    M2["Provider"]
+    M3["Space"]
+    M4["Reservation"]
+    M5["Payment"]
+    M6["Review"]
+    M7["Favorite"]
+  end
+
+  subgraph INFRA["Infraestructura"]
+    direction LR
+    PG[("PostgreSQL asyncpg")]
+    RD[("Redis async")]
+  end
+
+  subgraph WRK["Workers — Celery"]
+    direction LR
+    W3["Beat Schedule"]
+    W1["payment_tasks\nreconcile_stale"]
+    W2["reservation_tasks\nauto-expire"]
+  end
+
+  REQ --> MW --> RT --> SVC --> MDL --> INFRA
+  S1 --> RD
+  S5 --> RD
+  S2 --> RD
+  W3 --"cada 30 min"--> W1
+  W3 --> W2
+  W1 --> MDL
+  W2 --> MDL

@@ -1,0 +1,49 @@
+flowchart TD
+  subgraph INFRA["Infraestructura Frontend"]
+    direction LR
+    I3["next/navigation Middleware auth"]
+    I1["Tailwind CSS Shadcn/ui"]
+    I2["Axios / fetch API client"]
+  end
+
+  subgraph PAGES["Paginas — Next.js 14 App Router"]
+    direction LR
+    P1["/ Home\nBusqueda de espacios\nFiltros tipo / ciudad"]
+    P2["/spaces/[id]\nDetalle del espacio\nDisponibilidad / galeria"]
+    P3["/checkout\nSeleccion fecha y hora\nResumen de reserva"]
+    P4["/pay\nStripe / Transbank\nEleccion metodo pago"]
+    P5["/reserva/confirmacion\nConfirmacion de pago\nEstado de reserva"]
+    P6["/dashboard/client\nMis reservas\nHistorial / favoritos"]
+    P7["/dashboard/provider\nMis espacios\nReservas entrantes\nIngresos"]
+    P8["/admin\nGestion de usuarios\nVerificacion proveedores"]
+  end
+
+  subgraph QUERIES["Fetching — React Query"]
+    direction LR
+    Q1["useSpaces useSpace"]
+    Q2["useReservations useReservation"]
+    Q3["usePayment usePaymentStatus"]
+    Q4["useProviderSpaces useIncoming"]
+  end
+
+  subgraph UI["Componentes UI"]
+    direction LR
+    U1["SpaceCard SpaceGallery AvailabilityCalendar"]
+    U2["BookingForm PaymentSelector"]
+    U3["ReservationList StatusBadge"]
+    U4["ProviderStats RevenueChart"]
+  end
+
+  subgraph STATE["Estado Global — Zustand"]
+    direction LR
+    ST1["authStore\nuser / token / role"]
+    ST2["searchStore\nfiltros / resultados"]
+    ST3["bookingStore\nreserva en curso"]
+  end
+
+  INFRA --> PAGES
+  PAGES --> QUERIES
+  PAGES --> UI
+  PAGES --> STATE
+  QUERIES --> I2
+  UI --> I1

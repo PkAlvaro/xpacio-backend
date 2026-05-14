@@ -1,0 +1,95 @@
+erDiagram
+  users {
+    uuid id PK
+    string name
+    string email
+    string password_hash
+    string role
+    bool is_active
+    string phone
+    timestamp created_at
+    timestamp updated_at
+  }
+  providers {
+    uuid id PK
+    uuid user_id FK
+    string bio
+    string bank_rut
+    string bank_account
+    string verification_status
+    timestamp verified_at
+    timestamp created_at
+    timestamp updated_at
+  }
+  spaces {
+    uuid id PK
+    uuid provider_id FK
+    string name
+    string type
+    text description
+    string address
+    string city
+    numeric lat
+    numeric lng
+    int price_per_hour
+    int capacity
+    string cancellation_policy
+    int cancellation_hours
+    bool is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+  reservations {
+    uuid id PK
+    uuid space_id FK
+    uuid client_id FK
+    date date
+    time start_time
+    time end_time
+    int hours
+    int subtotal
+    int service_fee
+    int total
+    string status
+    text cancellation_reason
+    timestamp cancelled_at
+    timestamp expires_at
+    timestamp created_at
+    timestamp updated_at
+  }
+  payments {
+    uuid id PK
+    uuid reservation_id FK
+    string token
+    string buy_order
+    int amount
+    string provider
+    string status
+    jsonb raw_response
+    timestamp authorized_at
+    timestamp created_at
+    timestamp updated_at
+  }
+  reviews {
+    uuid id PK
+    uuid reservation_id FK
+    uuid client_id FK
+    uuid space_id FK
+    int rating
+    text comment
+    timestamp created_at
+    timestamp updated_at
+  }
+  favorites {
+    uuid user_id PK
+    uuid space_id PK
+  }
+  users ||--o| providers : "tiene perfil"
+  providers ||--|{ spaces : "publica"
+  users ||--|{ reservations : "realiza"
+  spaces ||--|{ reservations : "recibe"
+  reservations ||--o| payments : "genera pago"
+  reservations ||--o| reviews : "genera resena"
+  users ||--|{ reviews : "escribe"
+  spaces ||--|{ reviews : "recibe"
+  users }|--|{ spaces : "favoritos"
