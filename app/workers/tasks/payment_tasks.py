@@ -1,9 +1,10 @@
 import asyncio
+import stripe
 import structlog
 from sqlalchemy import select, and_
 
 from app.workers.celery_app import celery_app
-from app.constants import PaymentStatus
+from app.constants import PaymentStatus, ReservationStatus
 from app.utils.time_utils import now_chile
 
 logger = structlog.get_logger()
@@ -24,8 +25,13 @@ def reconcile_stale_payments():
 
 async def _reconcile():
     from app.models.payment import Payment
-    from app.services.payment_service import confirm_payment
+    from app.models.reservation import Reservation
+    from app.services.reservation_service import confirm_reservation
+    from app.config import get_settings
     from datetime import timedelta
+
+    settings = get_settings()
+    stripe.api_key = settings.STRIPE_SECRET_KEY
 
     SessionLocal = _get_session()
     cutoff = now_chile() - timedelta(minutes=30)
@@ -43,8 +49,32 @@ async def _reconcile():
 
     for payment in stale:
         try:
-            async with SessionLocal() as session:
-                await confirm_payment(payment.token, session)
-            logger.info("payment_reconciled", token=payment.token[:8])
+            checkout = stripe.checkout.Session.retrieve(payment.token)
+            if checkout.payment_status == "paid":
+                async with SessionLocal() as session:
+                    res = await session.execute(select(Payment).where(Payment.id == payment.id))
+                    p = res.scalar_one_or_none()
+                    if p and p.status == PaymentStatus.INITIATED:
+                        p.status = PaymentStatus.PAID
+                        p.authorized_at = now_chile()
+                        p.raw_response = {"stripe_session_id": payment.token, "source": "reconcile"}
+                        await confirm_reservation(p.reservation_id, session)
+                        await session.commit()
+                        logger.info("payment_reconciled_paid", session_id=payment.token[:12])
+            elif checkout.status == "expired":
+                async with SessionLocal() as session:
+                    res = await session.execute(select(Payment).where(Payment.id == payment.id))
+                    p = res.scalar_one_or_none()
+                    if p and p.status == PaymentStatus.INITIATED:
+                        p.status = PaymentStatus.FAILED
+                        p.raw_response = {"stripe_session_id": payment.token, "reason": "expired", "source": "reconcile"}
+                        res_result = await session.execute(
+                            select(Reservation).where(Reservation.id == p.reservation_id)
+                        )
+                        reservation = res_result.scalar_one_or_none()
+                        if reservation:
+                            reservation.status = ReservationStatus.CANCELLED
+                        await session.commit()
+                        logger.info("payment_reconciled_expired", session_id=payment.token[:12])
         except Exception as e:
-            logger.warning("payment_reconcile_fail", token=payment.token[:8], error=str(e))
+            logger.warning("payment_reconcile_fail", session_id=payment.token[:12], error=str(e))

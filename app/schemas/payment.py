@@ -9,8 +9,8 @@ class PaymentInitiate(BaseModel):
 
 class PaymentInitiateResponse(BaseModel):
     payment_id: uuid.UUID
-    webpay_url: str
-    token: str
+    checkout_url: str
+    session_id: str
 
 
 class PaymentResponse(BaseModel):

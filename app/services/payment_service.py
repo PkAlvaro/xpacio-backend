@@ -1,5 +1,5 @@
 import uuid
-import asyncio
+import stripe
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,24 +16,9 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-def _get_sdk():
-    from transbank.webpay.webpay_plus.transaction import Transaction
-    from transbank.common.integration_type import IntegrationType
-    from transbank.common.options import WebpayOptions
-
-    if settings.TRANSBANK_ENV == "production":
-        opts = WebpayOptions(
-            commerce_code=settings.TRANSBANK_COMMERCE_CODE,
-            api_key=settings.TRANSBANK_API_KEY,
-            integration_type=IntegrationType.LIVE,
-        )
-    else:
-        opts = WebpayOptions(
-            commerce_code=settings.TRANSBANK_COMMERCE_CODE,
-            api_key=settings.TRANSBANK_API_KEY,
-            integration_type=IntegrationType.TEST,
-        )
-    return Transaction(opts)
+def _stripe():
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    return stripe
 
 
 async def initiate_payment(
@@ -50,25 +35,36 @@ async def initiate_payment(
     if reservation.status != ReservationStatus.PENDING:
         raise DomainException(f"Reserva en estado '{reservation.status}' no puede iniciar pago")
 
-    # check existing payment
     existing = await session.execute(select(Payment).where(Payment.reservation_id == reservation_id))
     existing_payment = existing.scalar_one_or_none()
     if existing_payment and existing_payment.status == PaymentStatus.INITIATED:
+        checkout = _stripe().checkout.Session.retrieve(existing_payment.token)
+        existing_payment._checkout_url = checkout.url
         return existing_payment
 
-    buy_order = str(reservation.id)[:26]
-    session_id = str(client_id)[:61]
+    s = _stripe()
+    buy_order = str(reservation.id)
 
-    def _create():
-        tx = _get_sdk()
-        return tx.create(buy_order, session_id, reservation.total, settings.TRANSBANK_RETURN_URL)
-
-    response = await asyncio.to_thread(_create)
+    checkout = s.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "clp",
+                "product_data": {"name": f"Reserva Xpacio #{buy_order[:8]}"},
+                "unit_amount": reservation.total,
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
+        success_url=settings.STRIPE_SUCCESS_URL,
+        cancel_url=settings.STRIPE_CANCEL_URL,
+        metadata={"reservation_id": str(reservation_id), "client_id": str(client_id)},
+    )
 
     payment = Payment(
         id=uuid.uuid4(),
         reservation_id=reservation_id,
-        token=response["token"],
+        token=checkout.id,
         buy_order=buy_order,
         amount=reservation.total,
         status=PaymentStatus.INITIATED,
@@ -77,52 +73,60 @@ async def initiate_payment(
     await session.commit()
     await session.refresh(payment)
 
-    logger.info("payment_initiated", reservation_id=str(reservation_id), token=response["token"][:8])
-    payment._webpay_url = response["url"]
+    logger.info("payment_initiated", reservation_id=str(reservation_id), session_id=checkout.id[:12])
+    payment._checkout_url = checkout.url
     return payment
 
 
-async def confirm_payment(token: str, session: AsyncSession) -> Payment:
-    result = await session.execute(select(Payment).where(Payment.token == token))
+async def handle_webhook(payload: bytes, sig_header: str, session: AsyncSession) -> None:
+    try:
+        event = _stripe().Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
+    except Exception as e:
+        logger.error("stripe_webhook_invalid", error=str(e))
+        raise DomainException("Webhook inválido", status_code=400)
+
+    event_type = event["type"]
+    checkout_session = event["data"]["object"]
+    session_id = checkout_session["id"]
+
+    if event_type == "checkout.session.completed":
+        await _handle_success(session_id, session)
+    elif event_type == "checkout.session.expired":
+        await _handle_expired(session_id, session)
+    else:
+        logger.debug("stripe_event_ignored", type=event_type)
+
+
+async def _handle_success(session_id: str, session: AsyncSession) -> None:
+    result = await session.execute(select(Payment).where(Payment.token == session_id))
+    payment = result.scalar_one_or_none()
+    if not payment or payment.status == PaymentStatus.PAID:
+        return
+
+    payment.status = PaymentStatus.PAID
+    payment.authorized_at = now_chile()
+    payment.raw_response = {"stripe_session_id": session_id}
+    await confirm_reservation(payment.reservation_id, session)
+    await session.commit()
+    logger.info("payment_confirmed", session_id=session_id[:12])
+
+
+async def _handle_expired(session_id: str, session: AsyncSession) -> None:
+    result = await session.execute(select(Payment).where(Payment.token == session_id))
     payment = result.scalar_one_or_none()
     if not payment:
-        raise NotFoundError("Pago")
+        return
 
-    if payment.status == PaymentStatus.PAID:
-        return payment
+    payment.status = PaymentStatus.FAILED
+    payment.raw_response = {"stripe_session_id": session_id, "reason": "expired"}
 
-    def _commit():
-        tx = _get_sdk()
-        return tx.commit(token)
-
-    try:
-        response = await asyncio.to_thread(_commit)
-    except Exception as e:
-        logger.error("transbank_commit_error", error=str(e), token=token[:8])
-        payment.status = PaymentStatus.FAILED
-        payment.raw_response = {"error": str(e)}
-        await session.commit()
-        raise DomainException("Error al confirmar el pago con Transbank", status_code=502)
-
-    response_code = response.get("response_code", -1)
-    payment.raw_response = response
-
-    if response_code == 0:
-        payment.status = PaymentStatus.PAID
-        payment.authorized_at = now_chile()
-        await confirm_reservation(payment.reservation_id, session)
-        logger.info("payment_confirmed", token=token[:8])
-    else:
-        payment.status = PaymentStatus.FAILED
-        from app.models.reservation import Reservation as Res
-        res_result = await session.execute(select(Res).where(Res.id == payment.reservation_id))
-        reservation = res_result.scalar_one_or_none()
-        if reservation:
-            reservation.status = ReservationStatus.CANCELLED
-        logger.warning("payment_failed", token=token[:8], response_code=response_code)
+    res_result = await session.execute(select(Reservation).where(Reservation.id == payment.reservation_id))
+    reservation = res_result.scalar_one_or_none()
+    if reservation:
+        reservation.status = ReservationStatus.CANCELLED
 
     await session.commit()
-    return payment
+    logger.warning("payment_expired", session_id=session_id[:12])
 
 
 async def get_payment(payment_id: uuid.UUID, user_id: uuid.UUID, session: AsyncSession) -> Payment:

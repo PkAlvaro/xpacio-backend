@@ -98,6 +98,24 @@ async def create_space(
 
 
 @router.get(
+    "/mine",
+    response_model=dict,
+    summary="Mis espacios",
+    description="""
+Retorna todos los espacios del proveedor autenticado, incluyendo los inactivos.
+
+**Requiere autenticación con rol `provider` o `admin`.**
+""",
+)
+async def my_spaces(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    spaces = await space_service.list_provider_spaces(user.id, session)
+    return {"success": True, "data": [SpaceResponse.from_orm_with_amenities(s).model_dump() for s in spaces]}
+
+
+@router.get(
     "/{space_id}",
     response_model=dict,
     summary="Ver detalle de un espacio",

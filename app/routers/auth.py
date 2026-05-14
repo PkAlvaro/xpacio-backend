@@ -4,7 +4,7 @@ import redis.asyncio as aioredis
 
 from app.database import get_session
 from app.dependencies import get_redis, get_current_user
-from app.schemas.auth import RegisterRequest, LoginRequest, RefreshRequest, TokenResponse, UserResponse
+from app.schemas.auth import RegisterRequest, LoginRequest, RefreshRequest, TokenResponse, UserResponse, UpdateProfileRequest
 from app.services import auth_service
 from app.config import get_settings
 
@@ -111,3 +111,24 @@ Retorna el perfil del usuario actualmente autenticado: id, nombre, email, rol y 
 )
 async def me(user=Depends(get_current_user)):
     return {"success": True, "data": UserResponse.model_validate(user)}
+
+
+@router.patch(
+    "/me",
+    response_model=dict,
+    summary="Actualizar mi perfil",
+    description="""
+Actualiza el perfil del usuario autenticado. Solo se modifican los campos enviados.
+
+Para cambiar la contraseña, enviar `current_password` y `new_password`.
+
+**Requiere autenticación.**
+""",
+)
+async def update_me(
+    data: UpdateProfileRequest,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(get_current_user),
+):
+    updated = await auth_service.update_profile(user, data, session)
+    return {"success": True, "data": UserResponse.model_validate(updated)}

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.dependencies import get_current_user
-from app.constants import ReservationStatus
+from app.dependencies import get_current_user, require_role
+from app.constants import ReservationStatus, UserRole
 from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationCancel
 from app.services import reservation_service, availability_service
 
@@ -54,7 +54,7 @@ espacio, fecha y horario (detección de conflictos a nivel de base de datos).
 
 Estados posibles de una reserva:
 - `pending`: creada, esperando pago (expira en 15 min si no se paga)
-- `confirmed`: pago recibido y confirmado por Transbank
+- `confirmed`: pago recibido y confirmado por Stripe
 - `active`: la reserva está en curso (start_time <= ahora <= end_time)
 - `finished`: finalizó
 - `cancelled`: cancelada por el usuario
@@ -94,6 +94,28 @@ async def list_my_reservations(
 ):
     status_enum = ReservationStatus(status) if status else None
     items = await reservation_service.list_client_reservations(user.id, session, status_enum)
+    return {"success": True, "data": [ReservationResponse.model_validate(r).model_dump() for r in items]}
+
+
+@router.get(
+    "/reservations/incoming",
+    response_model=dict,
+    summary="Reservas entrantes (vista proveedor)",
+    description="""
+Retorna todas las reservas realizadas en los espacios del proveedor autenticado.
+
+Se puede filtrar por estado con el parámetro `status`.
+
+**Requiere autenticación con rol `provider` o `admin`.**
+""",
+)
+async def list_incoming_reservations(
+    status: str | None = Query(default=None, description="Filtrar por estado"),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    status_enum = ReservationStatus(status) if status else None
+    items = await reservation_service.list_incoming_reservations(user.id, session, status_enum)
     return {"success": True, "data": [ReservationResponse.model_validate(r).model_dump() for r in items]}
 
 

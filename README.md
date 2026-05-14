@@ -1,7 +1,7 @@
 # Xpacio Backend
 
 API REST para reserva de espacios bajo demanda.  
-**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Docker Compose
+**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Stripe · Docker Compose
 
 ---
 
@@ -9,6 +9,7 @@ API REST para reserva de espacios bajo demanda.
 
 - Docker Desktop (o Docker Engine + Compose plugin)
 - Git
+- Cuenta Stripe (gratuita para desarrollo)
 
 ---
 
@@ -27,8 +28,14 @@ cd xpacio-backend
 cp .env.example .env
 ```
 
-Editar `.env` con tus valores. Las variables mínimas para desarrollo local ya tienen defaults funcionales en `.env.example`.
+Editar `.env` con tus valores. Las variables críticas:
 
+| Variable | Dónde obtenerla |
+|----------|-----------------|
+| `STRIPE_SECRET_KEY` | Dashboard Stripe → Developers → API keys → Secret key |
+| `STRIPE_WEBHOOK_SECRET` | Dashboard Stripe → Developers → Webhooks → signing secret |
+
+> **Modo test:** usa claves `sk_test_...` — no se cobra dinero real.
 
 ### 3. Levantar servicios
 
@@ -60,8 +67,6 @@ curl http://localhost/health
 ---
 
 ## Documentación interactiva
-
-Abre en el browser:
 
 | URL | Descripción |
 |-----|-------------|
@@ -99,8 +104,8 @@ Abre en el browser:
 | `GET` | `/api/v1/reservations` | Mis reservas (filtro por estado) |
 | `GET` | `/api/v1/reservations/{id}` | Detalle de reserva |
 | `POST` | `/api/v1/reservations/{id}/cancel` | Cancelar reserva |
-| `POST` | `/api/v1/payments/initiate` | Iniciar pago Transbank |
-| `POST` | `/api/v1/payments/confirm` | Confirmar pago (webhook Transbank) |
+| `POST` | `/api/v1/payments/initiate` | Iniciar pago con Stripe |
+| `POST` | `/api/v1/payments/webhook` | Webhook de eventos Stripe |
 | `GET` | `/api/v1/payments/{id}` | Estado de pago |
 | `PATCH` | `/api/v1/admin/users/{id}/role` | Cambiar rol de usuario (solo admin) |
 
@@ -121,8 +126,8 @@ Abrir `http://localhost/docs`
 4. **Ver espacios disponibles:** `GET /api/v1/spaces`
 5. **Ver disponibilidad:** `GET /api/v1/spaces/{id}/availability?date=2026-05-20`
 6. **Reservar:** `POST /api/v1/reservations`
-7. **Iniciar pago:** `POST /api/v1/payments/initiate` → obtener `webpay_url`
-8. Visitar `webpay_url` → usar credenciales de integración Transbank (ver abajo)
+7. **Iniciar pago:** `POST /api/v1/payments/initiate` → obtener `checkout_url`
+8. Visitar `checkout_url` → usar tarjeta de prueba Stripe (ver abajo)
 
 ### Flujo admin → crear espacio
 
@@ -139,14 +144,36 @@ Abrir `http://localhost/docs`
 5. **Crear espacio:** `POST /api/v1/spaces` (el perfil de proveedor se crea automáticamente)
 6. **Configurar horarios:** `PUT /api/v1/spaces/{id}/schedules`
 
-### Credenciales Transbank (ambiente integración)
+### Tarjetas de prueba Stripe
 
-| Campo | Valor |
-|-------|-------|
-| Número de tarjeta | `4051 8856 0044 6623` |
-| CVV | `123` |
-| RUT | `11.111.111-1` |
-| Clave | `123` |
+| Escenario | Número de tarjeta | CVV | Fecha |
+|-----------|-------------------|-----|-------|
+| Pago exitoso | `4242 4242 4242 4242` | cualquier 3 dígitos | cualquier fecha futura |
+| Pago rechazado | `4000 0000 0000 0002` | cualquier 3 dígitos | cualquier fecha futura |
+| Requiere autenticación (3DS) | `4000 0025 0000 3155` | cualquier 3 dígitos | cualquier fecha futura |
+
+---
+
+## Configurar webhook de Stripe (desarrollo local)
+
+Para recibir webhooks de Stripe en local, usar el CLI de Stripe:
+
+```bash
+# Instalar Stripe CLI
+brew install stripe/stripe-cli/stripe
+
+# Autenticar
+stripe login
+
+# Reenviar eventos al backend local
+stripe listen --forward-to http://localhost/api/v1/payments/webhook
+```
+
+El CLI imprimirá un `whsec_...` temporal — úsalo en `STRIPE_WEBHOOK_SECRET` del `.env`.
+
+En producción, configurar el webhook directamente en el **Dashboard Stripe → Developers → Webhooks**:
+- URL: `https://tu-dominio.com/api/v1/payments/webhook`
+- Eventos a escuchar: `checkout.session.completed`, `checkout.session.expired`
 
 ---
 
@@ -181,7 +208,7 @@ Abrir `http://localhost/docs`
                        ┌──────────────────────────────────────┐
                        │  Servicios Externos                  │
                        │  • Nominatim (geocoding)             │
-                       │  • Transbank WebpayPlus (pagos)      │
+                       │  • Stripe (pagos)                    │
                        └──────────────────────────────────────┘
 ```
 
@@ -262,21 +289,21 @@ Paso 1 — CREAR RESERVA
 Paso 2 — INICIAR PAGO
   │
   ├─→ POST /api/v1/payments/initiate
-  ├─→ Transbank.Transaction.create(monto, return_url)
-  └─→ Retorna webpay_url → redirigir al usuario
+  ├─→ stripe.checkout.Session.create(monto, success_url, cancel_url)
+  └─→ Retorna checkout_url → redirigir al usuario
 
-Paso 3 — USUARIO PAGA EN TRANSBANK
+Paso 3 — USUARIO PAGA EN STRIPE
   │
-  ├─→ Formulario de pago Transbank
-  └─→ Webhook a POST /api/v1/payments/confirm?token_ws=...
+  ├─→ Formulario de pago alojado en Stripe
+  └─→ Stripe envía webhook a POST /api/v1/payments/webhook
 
 Paso 4 — CONFIRMAR PAGO (Webhook)
   │
-  ├─→ Transbank.Transaction.commit(token)
-  ├─→ SI response_code == 0:
+  ├─→ Verificar firma Stripe-Signature
+  ├─→ SI evento = checkout.session.completed:
   │     ├─→ payments.status = 'paid'
   │     └─→ reservations.status = 'confirmed'
-  └─→ SI falla:
+  └─→ SI evento = checkout.session.expired:
         ├─→ payments.status = 'failed'
         └─→ reservations.status = 'cancelled'
 
@@ -285,6 +312,11 @@ Paso 5 — TRANSICIONES AUTOMÁTICAS (Celery Beat)
   ├─→ pending sin pago > 15 min   → expired
   ├─→ confirmed + start_time <= now → active
   └─→ active + end_time <= now    → finished
+
+Paso 6 — RECONCILIACIÓN (Celery Beat, cada 30 min)
+  │
+  └─→ Consulta Stripe por pagos en estado 'initiated' > 30 min
+        └─→ Sincroniza estado si el webhook no llegó
 ```
 
 ---
@@ -317,8 +349,9 @@ users
       ├── total, status: pending|confirmed|active|finished|cancelled|expired
       │
       └──< payments (1:1)
-            ├── token (Transbank), buy_order
-            ├── amount, status: pending|paid|failed|refunded
+            ├── token (Stripe Checkout Session ID)
+            ├── buy_order (reservation UUID)
+            ├── amount, status: initiated|paid|failed|refunded
             └── raw_response (JSONB)
 ```
 
@@ -391,11 +424,11 @@ xpacio-backend/
 | Servicio | Propósito | Detalles |
 |----------|-----------|----------|
 | **Nominatim** | Geocoding | Cache Redis 30 días, límite 1 req/seg |
-| **Transbank** | Pagos | WebpayPlus SDK, env `integration` gratis |
+| **Stripe** | Pagos | Checkout Sessions, webhooks firmados, CLP nativo |
 | **PostgreSQL** | Datos principales | Driver async `asyncpg` |
 | **Redis** | Caché + JWT blacklist | TTL por tipo de dato |
 | **MinIO** | Imágenes de espacios | Compatible S3 |
-| **Celery** | Tareas background | Expiración reservas, transiciones |
+| **Celery** | Tareas background | Expiración reservas, transiciones, reconciliación |
 
 ---
 
@@ -435,7 +468,8 @@ Ver `.env.example` para la lista completa. Las más relevantes:
 | `DATABASE_URL` | Conexión PostgreSQL async |
 | `REDIS_URL` | Conexión Redis |
 | `SECRET_KEY` | Clave JWT (cambiar en producción) |
-| `TRANSBANK_COMMERCE_CODE` | Código de comercio Transbank |
-| `TRANSBANK_API_KEY` | API key Transbank |
-| `TRANSBANK_ENV` | `integration` o `production` |
+| `STRIPE_SECRET_KEY` | API key Stripe (`sk_test_...` o `sk_live_...`) |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret del webhook (`whsec_...`) |
+| `STRIPE_SUCCESS_URL` | URL de redirección tras pago exitoso |
+| `STRIPE_CANCEL_URL` | URL de redirección si el usuario cancela |
 | `FRONTEND_URL` | URL del frontend (CORS) |

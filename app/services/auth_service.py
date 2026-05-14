@@ -15,7 +15,7 @@ from app.services.jwt_service import (
     create_refresh_token,
     decode_token,
 )
-from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
+from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UpdateProfileRequest
 from app.config import get_settings
 
 logger = structlog.get_logger()
@@ -110,6 +110,56 @@ async def logout_user(access_token: str, redis: aioredis.Redis) -> None:
     ttl = settings.ACCESS_TOKEN_TTL_MINUTES * 60
     await redis.setex(f"{BLACKLIST_PREFIX}{token_data.jti}", ttl, "1")
     logger.info("user_logout", jti=token_data.jti)
+
+
+async def update_profile(
+    user: User,
+    data: UpdateProfileRequest,
+    session: AsyncSession,
+) -> User:
+    if data.new_password:
+        if not data.current_password:
+            raise DomainException("Se requiere la contraseña actual para cambiarla", status_code=400)
+        if not await verify_password(data.current_password, user.password_hash):
+            raise DomainException("Contraseña actual incorrecta", status_code=400)
+        user.password_hash = await hash_password(data.new_password)
+
+    if data.name is not None:
+        user.name = data.name
+    if data.phone is not None:
+        user.phone = data.phone
+
+    await session.commit()
+    await session.refresh(user)
+    logger.info("profile_updated", user_id=str(user.id))
+    return user
+
+
+async def list_users(session: AsyncSession, page: int = 1, page_size: int = 20) -> tuple[list[User], int]:
+    from sqlalchemy import func
+    count_result = await session.execute(select(func.count()).select_from(User))
+    total = count_result.scalar_one()
+    result = await session.execute(
+        select(User).order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
+    return result.scalars().all(), total
+
+
+async def get_user(user_id: uuid.UUID, session: AsyncSession) -> User:
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("Usuario")
+    return user
+
+
+async def toggle_user_active(user_id: uuid.UUID, is_active: bool, session: AsyncSession) -> User:
+    user = await get_user(user_id, session)
+    user.is_active = is_active
+    await session.commit()
+    await session.refresh(user)
+    logger.info("user_active_toggled", user_id=str(user_id), is_active=is_active)
+    return user
 
 
 def _build_tokens(user) -> TokenResponse:

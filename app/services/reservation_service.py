@@ -122,6 +122,32 @@ async def get_reservation(
     return reservation
 
 
+async def list_incoming_reservations(
+    provider_user_id: uuid.UUID,
+    session: AsyncSession,
+    status: ReservationStatus | None = None,
+) -> list[Reservation]:
+    from app.models.provider import Provider
+    from app.models.space import Space
+
+    prov_result = await session.execute(select(Provider).where(Provider.user_id == provider_user_id))
+    provider = prov_result.scalar_one_or_none()
+    if not provider:
+        return []
+
+    space_result = await session.execute(select(Space.id).where(Space.provider_id == provider.id))
+    space_ids = [row[0] for row in space_result.all()]
+    if not space_ids:
+        return []
+
+    query = select(Reservation).where(Reservation.space_id.in_(space_ids))
+    if status:
+        query = query.where(Reservation.status == status)
+    query = query.order_by(Reservation.date.desc())
+    result = await session.execute(query)
+    return result.scalars().all()
+
+
 async def _get_or_raise(reservation_id: uuid.UUID, session: AsyncSession) -> Reservation:
     result = await session.execute(select(Reservation).where(Reservation.id == reservation_id))
     reservation = result.scalar_one_or_none()

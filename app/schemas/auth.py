@@ -1,5 +1,5 @@
 import uuid
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.constants import UserRole
 
 
@@ -28,6 +28,24 @@ class ChangeRoleRequest(BaseModel):
     role: UserRole
 
 
+class ToggleActiveRequest(BaseModel):
+    is_active: bool
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = None
+    current_password: str | None = None
+    new_password: str | None = Field(default=None, min_length=8)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("El nombre no puede estar vacío")
+        return v.strip() if v else v
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -49,6 +67,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: UserRole
+    is_active: bool
     phone: str | None = None
 
     model_config = {"from_attributes": True}

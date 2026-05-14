@@ -187,6 +187,20 @@ async def set_schedules(
     return new_schedules
 
 
+async def list_provider_spaces(user_id: uuid.UUID, session: AsyncSession) -> list[Space]:
+    result = await session.execute(select(Provider).where(Provider.user_id == user_id))
+    provider = result.scalar_one_or_none()
+    if not provider:
+        return []
+    spaces_result = await session.execute(
+        select(Space)
+        .options(selectinload(Space.images), selectinload(Space.schedules), selectinload(Space.amenities))
+        .where(Space.provider_id == provider.id)
+        .order_by(Space.created_at.desc())
+    )
+    return spaces_result.scalars().all()
+
+
 async def _assert_owner(space: Space, user_id: uuid.UUID, session: AsyncSession) -> None:
     result = await session.execute(
         select(Provider).where(Provider.id == space.provider_id, Provider.user_id == user_id)
