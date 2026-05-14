@@ -1,7 +1,7 @@
 # Xpacio Backend
 
 API REST para reserva de espacios bajo demanda.  
-**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Transbank WebpayPlus · Docker Compose
+**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Docker Compose
 
 ---
 
@@ -29,7 +29,6 @@ cp .env.example .env
 
 Editar `.env` con tus valores. Las variables mínimas para desarrollo local ya tienen defaults funcionales en `.env.example`.
 
-> **Transbank:** en modo prototipo/desarrollo usa las credenciales de integración que vienen por defecto — no requiere cuenta real.
 
 ### 3. Levantar servicios
 
