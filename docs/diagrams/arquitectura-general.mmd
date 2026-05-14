@@ -28,6 +28,7 @@ flowchart LR
     STRIPE["Stripe API\nTarjetas internacionales"]
     TRANSBANK["Transbank\nWebpayPlus\nTarjetas chilenas"]
     GMAPS["Google Maps\nGeocoding API"]
+    GCAL["Google Calendar API\nService Account (prototipo)"]
   end
 
   FE -- "HTTPS" --> NGINX
@@ -37,6 +38,7 @@ flowchart LR
   API -- "checkout session" --> STRIPE
   API -- "webpay transaction" --> TRANSBANK
   API -- "geocoding" --> GMAPS
+  API -- "crear/eliminar evento" --> GCAL
   API -- "enqueue tasks" --> REDIS
   BEAT -- "trigger cada 30 min" --> CELERY
   CELERY -- "consume" --> REDIS

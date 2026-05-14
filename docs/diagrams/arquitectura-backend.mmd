@@ -12,7 +12,7 @@ flowchart TD
     direction LR
     R1["/auth\nregistro / login / refresh / me / logout"]
     R2["/spaces\nCRUD + mine"]
-    R3["/reservations\nCRUD + incoming"]
+    R3["/reservations\nCRUD + incoming + calendar"]
     R4["/payments/stripe\ninitiate / webhook"]
     R5["/payments/transbank\ninitiate / confirm"]
     R6["/payments\nestado"]
@@ -27,6 +27,7 @@ flowchart TD
     S3["reservation_service"]
     S4["payment_service\nStripe + Transbank"]
     S5["redis_service"]
+    S6["calendar_service\nGoogle Calendar API"]
   end
 
   subgraph MDL["Models — SQLAlchemy ORM"]
