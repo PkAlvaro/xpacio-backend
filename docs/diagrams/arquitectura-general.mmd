@@ -27,7 +27,7 @@ flowchart LR
   subgraph EXTERNAL["Servicios Externos"]
     STRIPE["Stripe API\nTarjetas internacionales"]
     TRANSBANK["Transbank\nWebpayPlus\nTarjetas chilenas"]
-    NOMINATIM["Nominatim OSM\nGeocodificacion"]
+    GMAPS["Google Maps\nGeocoding API"]
   end
 
   FE -- "HTTPS" --> NGINX
@@ -36,7 +36,7 @@ flowchart LR
   API -- "JWT blacklist + cache" --> REDIS
   API -- "checkout session" --> STRIPE
   API -- "webpay transaction" --> TRANSBANK
-  API -- "geocoding" --> NOMINATIM
+  API -- "geocoding" --> GMAPS
   API -- "enqueue tasks" --> REDIS
   BEAT -- "trigger cada 30 min" --> CELERY
   CELERY -- "consume" --> REDIS

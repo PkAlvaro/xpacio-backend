@@ -23,7 +23,7 @@ flowchart TD
   subgraph SVC["Services"]
     direction LR
     S1["auth_service\njwt_service\npassword_service"]
-    S2["space_service\navailability_service\ngeocoding_service"]
+    S2["space_service\navailability_service\ngeocoding_service (Google Maps)"]
     S3["reservation_service"]
     S4["payment_service\nStripe + Transbank"]
     S5["redis_service"]
