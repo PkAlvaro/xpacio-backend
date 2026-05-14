@@ -12,6 +12,7 @@ from app.constants import ReservationStatus, CancellationPolicy, PENDING_RESERVA
 from app.exceptions import ConflictError, NotFoundError, ForbiddenError, DomainException
 from app.schemas.reservation import ReservationCreate
 from app.utils.time_utils import now_chile, combine_chile
+from app.services import calendar_service
 
 logger = structlog.get_logger()
 
@@ -71,7 +72,50 @@ async def confirm_reservation(reservation_id: uuid.UUID, session: AsyncSession) 
         raise DomainException(f"No se puede confirmar una reserva en estado '{reservation.status}'")
     reservation.status = ReservationStatus.CONFIRMED
     await session.commit()
+    await session.refresh(reservation)
+
+    # Google Calendar — falla silenciosa si no configurado
+    await _sync_calendar_on_confirm(reservation, session)
+
     return reservation
+
+
+async def _sync_calendar_on_confirm(reservation: Reservation, session: AsyncSession) -> None:
+    from app.models.user import User
+
+    try:
+        await session.refresh(reservation, ["space", "client"])
+        space = reservation.space
+        client = reservation.client
+
+        # obtener email del proveedor
+        from app.models.provider import Provider
+        prov_result = await session.execute(
+            select(Provider).where(Provider.id == space.provider_id)
+        )
+        provider = prov_result.scalar_one_or_none()
+        prov_user = None
+        if provider:
+            prov_user_result = await session.execute(
+                select(User).where(User.id == provider.user_id)
+            )
+            prov_user = prov_user_result.scalar_one_or_none()
+
+        event_id = await calendar_service.create_event(
+            reservation_id=str(reservation.id),
+            space_name=space.name,
+            date=str(reservation.date),
+            start_time=reservation.start_time,
+            end_time=reservation.end_time,
+            total=reservation.total,
+            client_email=client.email,
+            provider_email=prov_user.email if prov_user else "",
+        )
+        if event_id:
+            reservation.google_event_id = event_id
+            await session.commit()
+    except Exception as e:
+        logger.warning("calendar_sync_failed", reservation_id=str(reservation.id), error=str(e))
 
 
 async def cancel_reservation(
@@ -89,12 +133,18 @@ async def cancel_reservation(
     if reservation.status not in (ReservationStatus.PENDING, ReservationStatus.CONFIRMED):
         raise DomainException(f"No se puede cancelar una reserva en estado '{reservation.status}'")
 
+    event_id = reservation.google_event_id
     now = now_chile()
     reservation.status = ReservationStatus.CANCELLED
     reservation.cancelled_at = now
     reservation.cancellation_reason = reason
+    reservation.google_event_id = None
     await session.commit()
     logger.info("reservation_cancelled", id=str(reservation_id))
+
+    if event_id:
+        await calendar_service.delete_event(event_id)
+
     return reservation
 
 

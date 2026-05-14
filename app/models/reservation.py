@@ -30,6 +30,7 @@ class Reservation(Base, TimestampMixin):
     cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     space = relationship("Space", back_populates="reservations")
     client = relationship("User", back_populates="reservations", foreign_keys=[client_id])

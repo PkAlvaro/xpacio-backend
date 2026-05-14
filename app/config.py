@@ -39,6 +39,10 @@ class Settings(BaseSettings):
 
     GOOGLE_MAPS_API_KEY: str = "placeholder_google_maps_key"
 
+    # Google Calendar (Service Account — prototype)
+    GOOGLE_SERVICE_ACCOUNT_JSON: str = "{}"
+    GOOGLE_CALENDAR_ID: str = ""
+
     FRONTEND_URL: str = "http://localhost:8080"
 
     @property

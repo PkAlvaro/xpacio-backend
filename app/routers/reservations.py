@@ -7,7 +7,7 @@ from app.database import get_session
 from app.dependencies import get_current_user, require_role
 from app.constants import ReservationStatus, UserRole
 from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationCancel
-from app.services import reservation_service, availability_service
+from app.services import reservation_service, availability_service, calendar_service
 
 router = APIRouter(prefix="/api/v1", tags=["reservations"])
 
@@ -164,3 +164,38 @@ async def cancel_reservation(
 ):
     reservation = await reservation_service.cancel_reservation(reservation_id, user.id, data.reason, session)
     return {"success": True, "data": ReservationResponse.model_validate(reservation).model_dump()}
+
+
+@router.get(
+    "/reservations/{reservation_id}/calendar",
+    response_model=dict,
+    summary="Link Google Calendar de la reserva",
+    description="""
+Retorna el enlace directo al evento de Google Calendar asociado a la reserva confirmada.
+
+El evento se crea automáticamente cuando el pago es aprobado e incluye una invitación
+a cliente y proveedor con recordatorios de 60 min (email) y 15 min (popup).
+
+Si Google Calendar no está configurado o la reserva aún no está confirmada, retorna `calendar_url: null`.
+
+**Requiere autenticación.**
+""",
+)
+async def get_calendar_event(
+    reservation_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(get_current_user),
+):
+    reservation = await reservation_service.get_reservation(reservation_id, user.id, session)
+    link = None
+    if reservation.google_event_id:
+        link = await calendar_service.get_event_link(reservation.google_event_id)
+    return {
+        "success": True,
+        "data": {
+            "reservation_id": str(reservation_id),
+            "google_event_id": reservation.google_event_id,
+            "calendar_url": link,
+            "status": reservation.status,
+        },
+    }
