@@ -1,7 +1,7 @@
 # Xpacio Backend
 
 API REST para reserva de espacios bajo demanda.  
-**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Stripe · Docker Compose
+**Stack:** FastAPI · PostgreSQL 15 · Redis 7 · Celery · Stripe · Transbank · Google Maps · Docker Compose
 
 ---
 
@@ -10,6 +10,7 @@ API REST para reserva de espacios bajo demanda.
 - Docker Desktop (o Docker Engine + Compose plugin)
 - Git
 - Cuenta Stripe (gratuita para desarrollo)
+- API key Google Maps Platform (Geocoding API habilitada)
 
 ---
 
@@ -34,6 +35,7 @@ Editar `.env` con tus valores. Las variables críticas:
 |----------|-----------------|
 | `STRIPE_SECRET_KEY` | Dashboard Stripe → Developers → API keys → Secret key |
 | `STRIPE_WEBHOOK_SECRET` | Dashboard Stripe → Developers → Webhooks → signing secret |
+| `GOOGLE_MAPS_API_KEY` | Google Cloud Console → APIs & Services → Credentials → habilitar Geocoding API |
 
 > **Modo test:** usa claves `sk_test_...` — no se cobra dinero real.
 
@@ -336,7 +338,7 @@ users
 │
 ├──< spaces (1:N via provider_id)
 │     ├── name, description, type, address, city
-│     ├── lat, lng (geocodificado por Nominatim)
+│     ├── lat, lng (geocodificado por Google Maps Geocoding API)
 │     ├── price_per_hour, capacity, is_active
 │     │
 │     ├──< space_schedules (horarios semanales)
@@ -425,7 +427,7 @@ xpacio-backend/
 
 | Servicio | Propósito | Detalles |
 |----------|-----------|----------|
-| **Nominatim** | Geocoding | Cache Redis 30 días, límite 1 req/seg |
+| **Google Maps** | Geocoding | Geocoding API, cache Redis 30 días, región Chile (`region=cl`) |
 | **Stripe** | Pagos | Checkout Sessions, webhooks firmados, CLP nativo |
 | **PostgreSQL** | Datos principales | Driver async `asyncpg` |
 | **Redis** | Caché + JWT blacklist | TTL por tipo de dato |
@@ -474,4 +476,5 @@ Ver `.env.example` para la lista completa. Las más relevantes:
 | `STRIPE_WEBHOOK_SECRET` | Signing secret del webhook (`whsec_...`) |
 | `STRIPE_SUCCESS_URL` | URL de redirección tras pago exitoso |
 | `STRIPE_CANCEL_URL` | URL de redirección si el usuario cancela |
+| `GOOGLE_MAPS_API_KEY` | API key Google Maps (Geocoding API habilitada) |
 | `FRONTEND_URL` | URL del frontend (CORS) |

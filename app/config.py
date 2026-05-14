@@ -37,8 +37,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = "noreply@xpacio.cl"
 
-    NOMINATIM_BASE_URL: str = "https://nominatim.openstreetmap.org"
-    NOMINATIM_USER_AGENT: str = "xpacio/1.0 (contact@xpacio.cl)"
+    GOOGLE_MAPS_API_KEY: str = "placeholder_google_maps_key"
 
     FRONTEND_URL: str = "http://localhost:8080"
 
