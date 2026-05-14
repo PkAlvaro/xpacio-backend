@@ -17,7 +17,8 @@ from app.exceptions import (
     integrity_error_handler,
     generic_exception_handler,
 )
-from app.routers import health, auth, spaces, reservations, payments, admin, providers
+from app.routers import health, auth, spaces, reservations, admin, providers
+from app.routers.payments import router_stripe, router_transbank, router_shared as router_payments_shared
 
 configure_logging()
 logger = structlog.get_logger()
@@ -63,7 +64,9 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(spaces.router)
     app.include_router(reservations.router)
-    app.include_router(payments.router)
+    app.include_router(router_stripe)
+    app.include_router(router_transbank)
+    app.include_router(router_payments_shared)
     app.include_router(providers.router)
     app.include_router(admin.router)
 

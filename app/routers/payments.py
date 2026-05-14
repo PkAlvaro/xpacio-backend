@@ -1,77 +1,80 @@
 import uuid
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Body
+from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.dependencies import get_current_user
-from app.schemas.payment import PaymentInitiate, PaymentResponse
+from app.schemas.payment import PaymentInitiateStripe, PaymentInitiateTransbank, PaymentResponse
 from app.services import payment_service
+from app.constants import PaymentProvider
 
-router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
+# Tres routers — Swagger los agrupa por tag
+router_stripe = APIRouter(prefix="/api/v1/payments/stripe", tags=["Pagos - Stripe (internacional)"])
+router_transbank = APIRouter(prefix="/api/v1/payments/transbank", tags=["Pagos - Transbank (Chile)"])
+router_shared = APIRouter(prefix="/api/v1/payments", tags=["Pagos - Estado"])
 
 
-@router.post(
+# ─── STRIPE ───────────────────────────────────────────────────────────────────
+
+@router_stripe.post(
     "/initiate",
     response_model=dict,
     status_code=201,
-    summary="Iniciar pago",
+    summary="[Stripe] Iniciar pago internacional",
     description="""
-Inicia el proceso de pago para una reserva en estado `pending`.
+Crea una Stripe Checkout Session para pagar con tarjeta internacional.
 
-El campo `provider` determina el medio de pago:
-- `stripe`: para clientes internacionales (tarjeta Visa/Mastercard/Amex)
-- `transbank`: para clientes nacionales Chile (Webpay, tarjetas debito/credito locales)
+Devuelve `redirect_url` — abrir esa URL en el browser para completar el pago.
 
-Retorna `redirect_url` — redirigir al usuario a esa URL para completar el pago.
+**Paso a paso para probar:**
+1. Crear reserva → `POST /reservations` → copiar `reservation_id`
+2. Ejecutar este endpoint con ese `reservation_id`
+3. Abrir `redirect_url` en el browser
+4. Usar tarjeta de prueba: `4242 4242 4242 4242` | CVV: `123` | fecha futura
+5. Stripe enviara el evento al webhook automaticamente
 
-**Flujo Stripe:**
-1. `POST /payments/initiate` con `provider: "stripe"` → obtener `redirect_url`
-2. Redirigir usuario a `redirect_url` (Stripe Checkout)
-3. Stripe notifica via `POST /payments/webhook`
-
-**Flujo Transbank:**
-1. `POST /payments/initiate` con `provider: "transbank"` → obtener `redirect_url` y `token`
-2. Redirigir usuario a `redirect_url` (Webpay)
-3. Transbank redirige de vuelta a `TRANSBANK_RETURN_URL?token_ws=...`
-4. Frontend llama `POST /payments/confirm?token_ws=...`
-
-**Tarjetas de prueba Stripe:**
-- Exitoso: `4242 4242 4242 4242`
-- Rechazado: `4000 0000 0000 0002`
-
-**Credenciales Transbank (integracion):**
-- Tarjeta: `4051 8856 0044 6623` | CVV: `123` | RUT: `11.111.111-1` | Clave: `123`
+**Estados resultantes:**
+- Pago exitoso → `payment.status = paid` | `reservation.status = confirmed`
+- Pago rechazado → tarjeta `4000 0000 0000 0002`
 
 **Requiere autenticacion.**
 """,
 )
-async def initiate_payment(
-    data: PaymentInitiate,
+async def initiate_stripe(
+    data: PaymentInitiateStripe,
     session: AsyncSession = Depends(get_session),
     user=Depends(get_current_user),
 ):
-    payment = await payment_service.initiate_payment(data.reservation_id, user.id, data.provider, session)
+    payment = await payment_service.initiate_payment(
+        data.reservation_id, user.id, PaymentProvider.STRIPE, session
+    )
     return {
         "success": True,
         "data": {
             "payment_id": str(payment.id),
-            "provider": payment.provider,
+            "provider": "stripe",
             "redirect_url": payment._redirect_url,
             "token": payment.token,
         },
     }
 
 
-@router.post(
+@router_stripe.post(
     "/webhook",
     response_model=dict,
-    summary="Webhook Stripe",
+    summary="[Stripe] Webhook de confirmacion automatica",
     description="""
-Endpoint que Stripe llama al completar o expirar un pago. Verifica firma `Stripe-Signature`.
+Stripe llama a este endpoint automaticamente cuando el usuario completa o abandona el pago.
 
-Eventos manejados:
-- `checkout.session.completed` -> `payment.status = paid`, `reservation.status = confirmed`
-- `checkout.session.expired` -> `payment.status = failed`, `reservation.status = cancelled`
+Verifica la firma `Stripe-Signature` del header para autenticar el evento.
+
+**No invocar manualmente** — Stripe lo llama solo.
+
+Para desarrollo local, usar Stripe CLI:
+```
+stripe listen --forward-to http://localhost/api/v1/payments/stripe/webhook
+```
 
 **No requiere autenticacion JWT.**
 """,
@@ -86,37 +89,108 @@ async def stripe_webhook(
     return {"received": True}
 
 
-@router.post(
+# ─── TRANSBANK ────────────────────────────────────────────────────────────────
+
+@router_transbank.post(
+    "/initiate",
+    response_model=dict,
+    status_code=201,
+    summary="[Transbank] Iniciar pago nacional (Webpay)",
+    description="""
+Crea una transaccion en Transbank WebpayPlus para pagar con tarjeta chilena (debito o credito).
+
+Devuelve `redirect_url` — abrir esa URL en el browser para completar el pago en Webpay.
+
+**Paso a paso para probar:**
+1. Crear reserva → `POST /reservations` → copiar `reservation_id`
+2. Ejecutar este endpoint con ese `reservation_id`
+3. Abrir `redirect_url` en el browser
+4. Usar credenciales de integracion (ver abajo)
+5. Transbank redirige de vuelta con `?token_ws=...` en la URL
+6. Copiar ese `token_ws` y ejecutar `POST /transbank/confirm?token_ws=...`
+
+**Credenciales de integracion (no se cobra dinero real):**
+
+| Campo | Valor |
+|-------|-------|
+| Numero de tarjeta | `4051 8856 0044 6623` |
+| CVV | `123` |
+| RUT | `11.111.111-1` |
+| Clave | `123` |
+
+**Requiere autenticacion.**
+""",
+)
+async def initiate_transbank(
+    data: PaymentInitiateTransbank,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(get_current_user),
+):
+    payment = await payment_service.initiate_payment(
+        data.reservation_id, user.id, PaymentProvider.TRANSBANK, session
+    )
+    return {
+        "success": True,
+        "data": {
+            "payment_id": str(payment.id),
+            "provider": "transbank",
+            "redirect_url": payment._redirect_url,
+            "token": payment.token,
+        },
+    }
+
+
+@router_transbank.post(
     "/confirm",
     response_model=dict,
-    summary="Confirmar pago Transbank (webhook)",
+    summary="[Transbank] Confirmar pago (paso 2 obligatorio)",
     description="""
-Endpoint al que Transbank redirige al usuario tras completar el pago en Webpay.
+Confirma la transaccion con Transbank despues de que el usuario pago en Webpay.
 
-Recibe `token_ws` como query parameter (lo envia Transbank en la redireccion).
-Confirma la transaccion y actualiza estados:
-- Exitoso: `payment.status = paid`, `reservation.status = confirmed`
-- Fallido: `payment.status = failed`, `reservation.status = cancelled`
+**Cuando invocar:**
+Transbank redirige al usuario a `TRANSBANK_RETURN_URL?token_ws=<TOKEN>`.
+El frontend extrae ese `token_ws` de la URL y llama a este endpoint.
+
+**Para probar manualmente en Swagger:**
+1. Completar el flujo en Webpay (abrir `redirect_url` del endpoint anterior)
+2. Copiar el `token_ws` de la URL de retorno
+3. Pegarlo en el campo `token_ws` de este endpoint y ejecutar
+
+**Resultado:**
+- `response_code = 0` → `payment.status = paid` | `reservation.status = confirmed`
+- `response_code != 0` → `payment.status = failed` | `reservation.status = cancelled`
 
 **No requiere autenticacion JWT.**
 """,
 )
 async def confirm_transbank(
-    token_ws: str = Query(..., description="Token enviado por Transbank en la redireccion"),
+    token_ws: str = Query(
+        ...,
+        description="Token recibido de Transbank en la URL de retorno (?token_ws=...)",
+        example="e9d555262736cf3d3cecdb0a26e027d4",
+    ),
     session: AsyncSession = Depends(get_session),
 ):
     payment = await payment_service.confirm_transbank(token_ws, session)
     return {"success": True, "data": PaymentResponse.model_validate(payment).model_dump()}
 
 
-@router.get(
+# ─── ESTADO ───────────────────────────────────────────────────────────────────
+
+@router_shared.get(
     "/{payment_id}",
     response_model=dict,
     summary="Estado de un pago",
     description="""
-Retorna el detalle y estado actual de un pago.
+Retorna el detalle y estado actual de un pago, independiente del proveedor.
 
-Estados: `initiated`, `paid`, `failed`, `refunded`.
+**Estados posibles:**
+- `initiated`: esperando que el usuario complete el pago
+- `paid`: pago confirmado
+- `failed`: pago rechazado o sesion expirada
+- `refunded`: reembolsado
+
+**Campo `provider`:** indica si fue `stripe` o `transbank`.
 
 Solo el dueno de la reserva puede consultar el pago.
 

@@ -3,6 +3,27 @@ from pydantic import BaseModel
 from app.constants import PaymentStatus, PaymentProvider
 
 
+class PaymentInitiateStripe(BaseModel):
+    reservation_id: uuid.UUID
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {"reservation_id": "00000000-0000-0000-0000-000000000000"}
+        }
+    }
+
+
+class PaymentInitiateTransbank(BaseModel):
+    reservation_id: uuid.UUID
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {"reservation_id": "00000000-0000-0000-0000-000000000000"}
+        }
+    }
+
+
+# Mantener para compatibilidad interna
 class PaymentInitiate(BaseModel):
     reservation_id: uuid.UUID
     provider: PaymentProvider

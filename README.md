@@ -104,9 +104,11 @@ curl http://localhost/health
 | `GET` | `/api/v1/reservations` | Mis reservas (filtro por estado) |
 | `GET` | `/api/v1/reservations/{id}` | Detalle de reserva |
 | `POST` | `/api/v1/reservations/{id}/cancel` | Cancelar reserva |
-| `POST` | `/api/v1/payments/initiate` | Iniciar pago con Stripe |
-| `POST` | `/api/v1/payments/webhook` | Webhook de eventos Stripe |
-| `GET` | `/api/v1/payments/{id}` | Estado de pago |
+| `POST` | `/api/v1/payments/stripe/initiate` | Iniciar pago internacional (Stripe) |
+| `POST` | `/api/v1/payments/stripe/webhook` | Webhook automatico Stripe |
+| `POST` | `/api/v1/payments/transbank/initiate` | Iniciar pago nacional Chile (Webpay) |
+| `POST` | `/api/v1/payments/transbank/confirm` | Confirmar pago Transbank (paso 2) |
+| `GET` | `/api/v1/payments/{id}` | Estado de pago (ambos proveedores) |
 | `PATCH` | `/api/v1/admin/users/{id}/role` | Cambiar rol de usuario (solo admin) |
 
 ---
