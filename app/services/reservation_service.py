@@ -28,13 +28,16 @@ async def create_reservation(
     if not space:
         raise NotFoundError("Espacio")
 
-    # calculate total
+    # calculate total — SC-001: precio server-side con descuento aplicado
+    from app.services.space_service import calculate_price
     start_dt = combine_chile(data.date, data.start_time)
     end_dt = combine_chile(data.date, data.end_time)
     duration_minutes = (end_dt - start_dt).seconds // 60
     hours = math.ceil(duration_minutes / 60)
-    subtotal = space.price_per_hour * hours
-    total = subtotal  # no service fee for MVP
+    num_people = getattr(data, "num_people", 1) or 1
+    pricing = calculate_price(space, hours, num_people)
+    subtotal = pricing["subtotal"]
+    total = pricing["total"]  # subtotal con descuento, sin service fee para MVP
 
     expires_at = now_chile() + timedelta(minutes=PENDING_RESERVATION_TTL_MINUTES)
 
@@ -46,6 +49,7 @@ async def create_reservation(
         start_time=data.start_time,
         end_time=data.end_time,
         hours=hours,
+        num_people=num_people,
         subtotal=subtotal,
         service_fee=0,
         total=total,
@@ -176,26 +180,36 @@ async def list_incoming_reservations(
     provider_user_id: uuid.UUID,
     session: AsyncSession,
     status: ReservationStatus | None = None,
-) -> list[Reservation]:
+) -> list[dict]:
     from app.models.provider import Provider
     from app.models.space import Space
+    from app.models.user import User
 
     prov_result = await session.execute(select(Provider).where(Provider.user_id == provider_user_id))
     provider = prov_result.scalar_one_or_none()
     if not provider:
         return []
 
-    space_result = await session.execute(select(Space.id).where(Space.provider_id == provider.id))
-    space_ids = [row[0] for row in space_result.all()]
-    if not space_ids:
-        return []
-
-    query = select(Reservation).where(Reservation.space_id.in_(space_ids))
+    query = (
+        select(Reservation, Space.name.label("space_name"), User.name.label("client_name"), User.email.label("client_email"))
+        .join(Space, Reservation.space_id == Space.id)
+        .join(User, Reservation.client_id == User.id)
+        .where(Space.provider_id == provider.id)
+    )
     if status:
         query = query.where(Reservation.status == status)
     query = query.order_by(Reservation.date.desc())
     result = await session.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+    out = []
+    for row in rows:
+        r = row[0]
+        d = {c.name: getattr(r, c.name) for c in r.__table__.columns}
+        d["space_name"] = row[1]
+        d["client_name"] = row[2]
+        d["client_email"] = row[3]
+        out.append(d)
+    return out
 
 
 async def _get_or_raise(reservation_id: uuid.UUID, session: AsyncSession) -> Reservation:

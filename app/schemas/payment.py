@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from pydantic import BaseModel
 from app.constants import PaymentStatus, PaymentProvider
 
@@ -42,5 +43,5 @@ class PaymentResponse(BaseModel):
     provider: PaymentProvider
     amount: int
     status: PaymentStatus
-    authorized_at: str | None = None
+    authorized_at: datetime | None = None
     model_config = {"from_attributes": True}

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.dependencies import get_current_user, require_role
 from app.constants import ReservationStatus, UserRole
-from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationCancel
+from app.schemas.reservation import ReservationCreate, ReservationResponse, ReservationCancel, IncomingReservationResponse
 from app.services import reservation_service, availability_service, calendar_service
 
 router = APIRouter(prefix="/api/v1", tags=["reservations"])
@@ -116,7 +116,7 @@ async def list_incoming_reservations(
 ):
     status_enum = ReservationStatus(status) if status else None
     items = await reservation_service.list_incoming_reservations(user.id, session, status_enum)
-    return {"success": True, "data": [ReservationResponse.model_validate(r).model_dump() for r in items]}
+    return {"success": True, "data": [IncomingReservationResponse.model_validate(r).model_dump() for r in items]}
 
 
 @router.get(

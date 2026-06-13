@@ -52,6 +52,12 @@ class CancellationPolicy(StrEnum):
     STRICT = "strict"
 
 
+class DiscountType(StrEnum):
+    """SC-001 — tipo de descuento aplicable a un espacio."""
+    PERCENTAGE = "percentage"  # descuento porcentual sobre el subtotal
+    VOLUME = "volume"          # descuento porcentual si num_people >= discount_min_people
+
+
 PENDING_RESERVATION_TTL_MINUTES = 15
 GEO_CACHE_TTL_DAYS = 30
 AVAILABILITY_CACHE_TTL_SECONDS = 60

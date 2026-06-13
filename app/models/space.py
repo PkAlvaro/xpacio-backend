@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.base import Base, TimestampMixin, new_uuid
-from app.constants import SpaceType, CancellationPolicy
+from app.constants import SpaceType, CancellationPolicy, DiscountType
 
 
 class Space(Base, TimestampMixin):
@@ -30,6 +30,16 @@ class Space(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     rating: Mapped[float] = mapped_column(Numeric(3, 2), default=0.0, nullable=False)
     review_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # SC-001 — Descuentos / Ofertas (REQ-2.3 / REQ-3.5)
+    # Se almacenan de forma independiente para no corromper el precio base histórico.
+    discount_type: Mapped[DiscountType | None] = mapped_column(
+        SAEnum(DiscountType, name="discount_type", values_callable=lambda x: [e.value for e in x]),
+        nullable=True,
+    )
+    discount_value: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)  # % de descuento
+    discount_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    discount_min_people: Mapped[int | None] = mapped_column(Integer, nullable=True)  # mínimo para descuento por volumen
 
     provider = relationship("Provider", back_populates="spaces")
     schedules = relationship("SpaceSchedule", back_populates="space", cascade="all, delete-orphan")

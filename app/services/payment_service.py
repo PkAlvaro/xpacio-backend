@@ -139,7 +139,7 @@ async def _initiate_transbank(reservation: Reservation, session: AsyncSession) -
     await session.refresh(payment)
 
     logger.info("transbank_payment_initiated", reservation_id=str(reservation.id), token=response["token"][:8])
-    payment._redirect_url = response["url"]
+    payment._redirect_url = f"{response['url']}?token_ws={response['token']}"
     return payment
 
 

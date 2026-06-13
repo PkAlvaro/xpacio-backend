@@ -40,6 +40,7 @@ async def list_spaces(
     city: str | None = Query(default=None, description="Ciudad (ej. Santiago)"),
     min_price: int | None = Query(default=None, description="Precio mínimo por hora (CLP)"),
     max_price: int | None = Query(default=None, description="Precio máximo por hora (CLP)"),
+    on_offer: bool = Query(default=False, description="Solo espacios en oferta (descuento activo)"),
     page: int = Query(default=1, ge=1, description="Número de página"),
     page_size: int = Query(default=20, ge=1, le=50, description="Resultados por página (máx 50)"),
     session: AsyncSession = Depends(get_session),
@@ -49,6 +50,7 @@ async def list_spaces(
         lat=lat, lng=lng, radius_km=radius_km,
         type=SpaceType(type) if type else None,
         city=city, min_price=min_price, max_price=max_price,
+        on_offer=on_offer,
         page=page, page_size=page_size,
     )
     items, total = await space_service.list_spaces(filters, session)
@@ -128,6 +130,30 @@ Retorna el detalle completo de un espacio: información, amenities, imágenes y 
 async def get_space(space_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     space = await space_service.get_space(space_id, session)
     return {"success": True, "data": SpaceResponse.from_orm_with_amenities(space).model_dump()}
+
+
+@router.get(
+    "/{space_id}/similar",
+    response_model=dict,
+    summary="Espacios similares recomendados (SC-002)",
+    description="""
+Retorna un mínimo de 3 espacios similares al indicado, comparando por **tipo**,
+**ciudad** o **rango de precio ±30%**, excluyendo el propio espacio.
+
+Si no existen suficientes espacios similares en el catálogo piloto, se completa de
+forma controlada con los espacios mejor calificados (fallback sin error, nunca vacío
+si hay al menos otros espacios activos).
+
+**No requiere autenticación.**
+""",
+)
+async def get_similar_spaces(
+    space_id: uuid.UUID,
+    limit: int = Query(default=6, ge=3, le=12, description="Máximo de espacios a retornar"),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await space_service.get_similar_spaces(space_id, session, limit)
+    return {"success": True, "data": [i.model_dump() for i in items]}
 
 
 @router.patch(

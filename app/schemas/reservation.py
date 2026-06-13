@@ -10,6 +10,7 @@ class ReservationCreate(BaseModel):
     date: date
     start_time: time
     end_time: time
+    num_people: Annotated[int, Field(ge=1)] = 1  # SC-001 — para descuento por volumen
 
     @model_validator(mode="after")
     def validate_times(self) -> "ReservationCreate":
@@ -26,11 +27,18 @@ class ReservationResponse(BaseModel):
     start_time: time
     end_time: time
     hours: int
+    num_people: int = 1
     subtotal: int
     service_fee: int
     total: int
     status: ReservationStatus
     model_config = {"from_attributes": True}
+
+
+class IncomingReservationResponse(ReservationResponse):
+    space_name: str | None = None
+    client_name: str | None = None
+    client_email: str | None = None
 
 
 class ReservationCancel(BaseModel):

@@ -8,6 +8,15 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     phone: str | None = None
+    # Permite registrarse como cliente o proveedor (anfitrión). 'admin' no es auto-asignable.
+    role: UserRole = UserRole.CLIENT
+
+    @field_validator("role")
+    @classmethod
+    def role_not_admin(cls, v: UserRole) -> UserRole:
+        if v == UserRole.ADMIN:
+            raise ValueError("No es posible registrarse como administrador")
+        return v
 
     @field_validator("password")
     @classmethod

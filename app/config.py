@@ -49,6 +49,20 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENV == "production"
 
+    @property
+    def cors_origins(self) -> list[str]:
+        """Orígenes permitidos para CORS. Incluye FRONTEND_URL más los hosts locales
+        habituales (nginx en :80 y el dev server de Vite en :8080)."""
+        origins = {
+            self.FRONTEND_URL,
+            "http://localhost",
+            "http://localhost:80",
+            "http://localhost:8080",
+            "http://127.0.0.1",
+            "http://127.0.0.1:8080",
+        }
+        return [o for o in origins if o]
+
 
 @lru_cache
 def get_settings() -> Settings:

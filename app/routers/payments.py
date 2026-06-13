@@ -1,5 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, Query, Request, Body
+from fastapi.responses import RedirectResponse
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,6 +139,27 @@ async def initiate_transbank(
             "token": payment.token,
         },
     }
+
+
+@router_transbank.api_route(
+    "/return",
+    methods=["GET", "POST"],
+    include_in_schema=False,
+)
+async def transbank_return(request: Request):
+    """URL de retorno de Webpay. Transbank redirige aquí (normalmente vía POST con
+    `token_ws` en el form). Como el frontend es una SPA estática servida por nginx
+    (que no acepta POST), este endpoint recibe el POST/GET y redirige (303 → GET) a la
+    ruta del SPA `/pago/retorno?token_ws=...`, donde el frontend confirma el pago.
+    """
+    token_ws = request.query_params.get("token_ws")
+    if not token_ws:
+        try:
+            form = await request.form()
+            token_ws = form.get("token_ws") or form.get("TBK_TOKEN")
+        except Exception:
+            token_ws = None
+    return RedirectResponse(url=f"/pago/retorno?token_ws={token_ws or ''}", status_code=303)
 
 
 @router_transbank.post(

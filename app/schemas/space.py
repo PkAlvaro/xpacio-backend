@@ -1,7 +1,23 @@
 import uuid
 from typing import Annotated
-from pydantic import BaseModel, Field, field_validator
-from app.constants import SpaceType, CancellationPolicy
+from pydantic import BaseModel, Field, field_validator, model_validator
+from app.constants import SpaceType, CancellationPolicy, DiscountType
+
+
+def compute_discounted_price(
+    price_per_hour: int,
+    discount_active: bool,
+    discount_type: DiscountType | None,
+    discount_value: float | None,
+) -> int | None:
+    """Precio por hora ya con descuento aplicado, para mostrar en UI.
+    Para descuento por volumen el precio efectivo depende de num_people, por lo que
+    aquí se muestra el precio con descuento asumiendo que el mínimo se cumple."""
+    if not discount_active or not discount_type or not discount_value:
+        return None
+    if discount_type in (DiscountType.PERCENTAGE, DiscountType.VOLUME):
+        return int(round(price_per_hour * (1 - float(discount_value) / 100)))
+    return None
 
 
 class SpaceImageOut(BaseModel):
@@ -43,6 +59,18 @@ class SpaceUpdate(BaseModel):
     is_active: bool | None = None
     amenities: list[str] | None = None
 
+    # SC-001 — Descuentos / Ofertas
+    discount_type: DiscountType | None = None
+    discount_value: Annotated[float | None, Field(default=None, gt=0, le=100)] = None
+    discount_active: bool | None = None
+    discount_min_people: Annotated[int | None, Field(default=None, ge=1)] = None
+
+    @model_validator(mode="after")
+    def validate_discount(self) -> "SpaceUpdate":
+        if self.discount_type == DiscountType.VOLUME and self.discount_active and not self.discount_min_people:
+            raise ValueError("El descuento por volumen requiere 'discount_min_people'")
+        return self
+
 
 class SpaceResponse(BaseModel):
     id: uuid.UUID
@@ -61,6 +89,12 @@ class SpaceResponse(BaseModel):
     is_active: bool
     rating: float
     review_count: int
+    # SC-001 — Descuentos / Ofertas
+    discount_type: DiscountType | None = None
+    discount_value: float | None = None
+    discount_active: bool = False
+    discount_min_people: int | None = None
+    discounted_price: int | None = None
     images: list[SpaceImageOut] = []
     schedules: list[SpaceScheduleOut] = []
     amenities: list[str] = []
@@ -72,6 +106,14 @@ class SpaceResponse(BaseModel):
         if v and hasattr(v[0], "name"):
             return [a.name for a in v]
         return v
+
+    @model_validator(mode="after")
+    def fill_discounted_price(self) -> "SpaceResponse":
+        if self.discounted_price is None:
+            self.discounted_price = compute_discounted_price(
+                self.price_per_hour, self.discount_active, self.discount_type, self.discount_value
+            )
+        return self
 
     @classmethod
     def from_orm_with_amenities(cls, space) -> "SpaceResponse":
@@ -93,6 +135,12 @@ class SpaceListItem(BaseModel):
     is_active: bool
     primary_image: str | None = None
     distance_km: float | None = None
+    # SC-001 — Descuentos / Ofertas
+    discount_type: DiscountType | None = None
+    discount_value: float | None = None
+    discount_active: bool = False
+    discount_min_people: int | None = None
+    discounted_price: int | None = None
     model_config = {"from_attributes": True}
 
 
@@ -104,6 +152,7 @@ class SpaceFilters(BaseModel):
     city: str | None = None
     min_price: int | None = None
     max_price: int | None = None
+    on_offer: bool = False  # SC-001 — filtrar solo espacios con descuento activo
     page: Annotated[int, Field(ge=1)] = 1
     page_size: Annotated[int, Field(ge=1, le=50)] = 20
 

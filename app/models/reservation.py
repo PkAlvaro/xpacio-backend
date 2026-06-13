@@ -18,6 +18,7 @@ class Reservation(Base, TimestampMixin):
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    num_people: Mapped[int] = mapped_column(Integer, nullable=False, default=1)  # SC-001 — para descuento por volumen
     subtotal: Mapped[int] = mapped_column(Integer, nullable=False)
     service_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False)

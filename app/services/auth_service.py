@@ -34,17 +34,24 @@ async def register_user(
         raise ConflictError("El email ya está registrado")
 
     hashed = await hash_password(data.password)
+    role = getattr(data, "role", UserRole.CLIENT) or UserRole.CLIENT
+    if role == UserRole.ADMIN:
+        role = UserRole.CLIENT
     user = User(
         id=uuid.uuid4(),
         name=data.name,
         email=data.email,
         password_hash=hashed,
-        role=UserRole.CLIENT,
+        role=role,
         phone=data.phone,
     )
     session.add(user)
 
     try:
+        await session.flush()
+        # Si se registra como proveedor, crear su perfil de proveedor de inmediato
+        if role == UserRole.PROVIDER:
+            session.add(Provider(id=uuid.uuid4(), user_id=user.id))
         await session.commit()
         await session.refresh(user)
     except IntegrityError:
