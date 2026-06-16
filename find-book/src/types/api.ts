@@ -108,6 +108,11 @@ export interface SpaceListItem {
   is_active: boolean;
   primary_image?: string;
   distance_km?: number;
+  discount_active?: boolean;
+  discount_type?: string;
+  discount_value?: number;
+  discount_min_people?: number;
+  discounted_price?: number;
 }
 
 export interface SpaceFilters {

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { MapPin, Star, Users } from "lucide-react";
+import { MapPin, Star, Users, Tag } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { SpaceListItem } from "@/types/api";
@@ -11,6 +11,7 @@ const PLACEHOLDER = "https://images.unsplash.com/photo-1497366216548-37526070297
 
 export const SpaceCard = ({ space, index = 0 }: { space: SpaceListItem; index?: number }) => {
   const image = space.primary_image ?? PLACEHOLDER;
+  const hasDiscount = space.discount_active && !!space.discount_value;
 
   return (
     <motion.div
