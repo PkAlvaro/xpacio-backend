@@ -43,6 +43,7 @@ async def list_spaces(
     max_price: int | None = Query(default=None, description="Precio máximo por hora (CLP)"),
     q: str | None = Query(default=None, description="Filtrar por nombre (ILIKE)"),
     on_offer: bool = Query(default=False, description="Solo espacios en oferta (descuento activo)"),
+    min_capacity: int | None = Query(default=None, description="Capacidad mínima de personas"),
     page: int = Query(default=1, ge=1, description="Número de página"),
     page_size: int = Query(default=20, ge=1, le=50, description="Resultados por página (máx 50)"),
     session: AsyncSession = Depends(get_session),
@@ -52,6 +53,7 @@ async def list_spaces(
         lat=lat, lng=lng, radius_km=radius_km,
         type=SpaceType(type) if type else None,
         city=city, name=q, min_price=min_price, max_price=max_price,
+        min_capacity=min_capacity,
         on_offer=on_offer,
         page=page, page_size=page_size,
     )
@@ -190,9 +192,10 @@ async def update_space(
     space_id: uuid.UUID,
     data: SpaceUpdate,
     session: AsyncSession = Depends(get_session),
+    redis: aioredis.Redis = Depends(get_redis),
     user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
 ):
-    space = await space_service.update_space(space_id, data, user.id, session)
+    space = await space_service.update_space(space_id, data, user.id, session, redis)
     return {"success": True, "data": SpaceResponse.from_orm_with_amenities(space).model_dump()}
 
 

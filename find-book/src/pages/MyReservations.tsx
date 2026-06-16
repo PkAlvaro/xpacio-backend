@@ -83,10 +83,14 @@ const MyReservations = () => {
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <h3 className="font-semibold">Reserva #{r.id.slice(0, 8)}</h3>
-                    <Link to={`/espacio/${r.space_id}`} className="text-sm text-primary hover:underline">
-                      Ver espacio
-                    </Link>
+                    <h3 className="font-semibold">
+                      {r.space_name
+                        ? <Link to={`/espacio/${r.space_id}`} className="hover:underline">{r.space_name}</Link>
+                        : `Reserva #${r.id.slice(0, 8)}`}
+                    </h3>
+                    {r.space_name && (
+                      <p className="text-xs text-muted-foreground">#{r.id.slice(0, 8)}</p>
+                    )}
                   </div>
                   <span className={cn("px-3 py-1 rounded-full text-xs font-medium", STATUS_CLASS[r.status])}>
                     {STATUS_LABEL[r.status]}

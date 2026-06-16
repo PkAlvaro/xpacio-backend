@@ -129,6 +129,7 @@ export interface SpaceFilters {
   q?: string;
   min_price?: number;
   max_price?: number;
+  min_capacity?: number;
   page?: number;
   page_size?: number;
 }
@@ -146,6 +147,7 @@ export interface TimeSlot {
 export interface Reservation {
   id: string;
   space_id: string;
+  space_name?: string | null;
   client_id: string;
   date: string;
   start_time: string;

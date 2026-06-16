@@ -22,6 +22,7 @@ class ReservationCreate(BaseModel):
 class ReservationResponse(BaseModel):
     id: uuid.UUID
     space_id: uuid.UUID
+    space_name: str | None = None
     client_id: uuid.UUID
     date: date
     start_time: time

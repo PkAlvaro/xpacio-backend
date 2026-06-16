@@ -229,6 +229,7 @@ class SpaceFilters(BaseModel):
     name: str | None = None
     min_price: int | None = None
     max_price: int | None = None
+    min_capacity: int | None = None
     on_offer: bool = False  # SC-001 — filtrar solo espacios con descuento activo
     page: Annotated[int, Field(ge=1)] = 1
     page_size: Annotated[int, Field(ge=1, le=50)] = 20

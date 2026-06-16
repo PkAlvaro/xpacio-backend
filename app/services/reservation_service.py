@@ -156,13 +156,25 @@ async def list_client_reservations(
     client_id: uuid.UUID,
     session: AsyncSession,
     status: ReservationStatus | None = None,
-) -> list[Reservation]:
-    query = select(Reservation).where(Reservation.client_id == client_id)
+) -> list[dict]:
+    from app.models.space import Space
+    from sqlalchemy import outerjoin
+    query = (
+        select(Reservation, Space.name.label("space_name"))
+        .outerjoin(Space, Space.id == Reservation.space_id)
+        .where(Reservation.client_id == client_id)
+    )
     if status:
         query = query.where(Reservation.status == status)
     query = query.order_by(Reservation.date.desc())
     result = await session.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+    out = []
+    for reservation, space_name in rows:
+        d = {c.key: getattr(reservation, c.key) for c in Reservation.__table__.columns}
+        d["space_name"] = space_name
+        out.append(d)
+    return out
 
 
 async def get_reservation(

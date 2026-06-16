@@ -7,7 +7,7 @@ import {
   setSchedules, uploadSpaceImage, deleteSpaceImage, setPrimaryImage,
   formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceUpdatePayload, SpaceType, Schedule, SpaceImage, IncomingReservation,
 } from "@/lib/spaces";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const MySpaces = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"spaces" | "reservations">("spaces");
+  const [tab, setTab] = useState<"spaces" | "reservations" | "profile">("spaces");
   const [showCreate, setShowCreate] = useState(false);
   const [editingSpace, setEditingSpace] = useState<Space | null>(null);
   const { data: me, isLoading: meLoading } = useMe();
@@ -86,6 +86,14 @@ const MySpaces = () => {
         >
           <CalendarCheck className="w-3.5 h-3.5" /> Reservas recibidas
         </button>
+        <button
+          onClick={() => setTab("profile")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-smooth -mb-px ${
+            tab === "profile" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Mi perfil
+        </button>
       </div>
 
       {/* Mis espacios */}
@@ -113,6 +121,9 @@ const MySpaces = () => {
           )}
         </>
       )}
+
+      {/* Perfil proveedor */}
+      {tab === "profile" && <ProviderProfileForm />}
 
       {/* Reservas recibidas */}
       {tab === "reservations" && (
@@ -776,5 +787,101 @@ const IncomingReservationCard = ({ reservation: r }: { reservation: IncomingRese
     </div>
   </div>
 );
+
+// ── Perfil de proveedor ────────────────────────────────────────────────────────
+
+const ProviderProfileForm = () => {
+  const qc = useQueryClient();
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["provider-profile"],
+    queryFn: async () => {
+      const res = await apiRequest<{ success: boolean; data: { bio: string | null; bank_rut: string | null; bank_account: string | null; verification_status: string } }>("/providers/me");
+      return res.data;
+    },
+  });
+
+  const [bio, setBio] = useState("");
+  const [bankRut, setBankRut] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+
+  useEffect(() => {
+    if (profile) {
+      setBio(profile.bio ?? "");
+      setBankRut(profile.bank_rut ?? "");
+      setBankAccount(profile.bank_account ?? "");
+    }
+  }, [profile]);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      apiRequest("/providers/me", {
+        method: "PATCH",
+        body: JSON.stringify({ bio: bio || null, bank_rut: bankRut || null, bank_account: bankAccount || null }),
+      }),
+    onSuccess: () => {
+      toast.success("Perfil actualizado");
+      qc.invalidateQueries({ queryKey: ["provider-profile"] });
+    },
+    onError: () => toast.error("No se pudo guardar"),
+  });
+
+  if (isLoading) return <div className="text-center py-20 text-muted-foreground">Cargando…</div>;
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    verified: "bg-green-100 text-green-800",
+    rejected: "bg-red-100 text-red-800",
+  };
+  const statusLabels: Record<string, string> = { pending: "Pendiente", verified: "Verificado", rejected: "Rechazado" };
+  const vs = profile?.verification_status ?? "pending";
+
+  return (
+    <div className="max-w-xl space-y-6">
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold">Perfil de anfitrión</h2>
+        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusColors[vs] ?? "bg-muted"}`}>
+          {statusLabels[vs] ?? vs}
+        </span>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold mb-1">Biografía</label>
+          <textarea
+            rows={4}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none"
+            placeholder="Cuéntanos sobre ti y tus espacios…"
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">RUT bancario</label>
+          <input
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            placeholder="12.345.678-9"
+            value={bankRut}
+            onChange={(e) => setBankRut(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Número de cuenta</label>
+          <input
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            placeholder="00-123-45678-01"
+            value={bankAccount}
+            onChange={(e) => setBankAccount(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <Button variant="hero" disabled={mut.isPending} onClick={() => mut.mutate()}>
+        {mut.isPending ? "Guardando…" : "Guardar perfil"}
+      </Button>
+    </div>
+  );
+};
 
 export default MySpaces;

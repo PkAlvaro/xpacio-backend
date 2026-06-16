@@ -157,6 +157,8 @@ async def list_spaces(filters: SpaceFilters, session: AsyncSession) -> tuple[lis
         query = query.where(Space.price_per_hour <= filters.max_price)
     if filters.name:
         query = query.where(func.lower(Space.name).contains(filters.name.lower()))
+    if filters.min_capacity:
+        query = query.where(Space.capacity >= filters.min_capacity)
     if filters.on_offer:
         query = query.where(Space.discount_active == True)
 
@@ -332,12 +334,23 @@ async def update_space(
     data: SpaceUpdate,
     user_id: uuid.UUID,
     session: AsyncSession,
+    redis=None,
 ) -> Space:
     space = await _load_space(session, space_id)
     await _assert_owner(space, user_id, session)
 
+    address_changed = (data.address is not None and data.address != space.address) or \
+                      (data.city is not None and data.city != space.city)
+
     for field, value in data.model_dump(exclude_unset=True, exclude={"amenities"}).items():
         setattr(space, field, value)
+
+    if address_changed:
+        addr = data.address or space.address
+        city = data.city or space.city
+        coords = await geocode(f"{addr}, {city}, Chile", redis)
+        if coords:
+            space.lat, space.lng = coords[0], coords[1]
 
     if data.amenities is not None:
         for amenity in space.amenities:
