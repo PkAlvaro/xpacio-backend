@@ -179,6 +179,23 @@ export async function updateSpaceOffer(id: string, payload: OfferUpdate): Promis
   return mapSpace(data);
 }
 
+export interface SpaceUpdatePayload {
+  name?: string;
+  type?: SpaceType;
+  description?: string;
+  address?: string;
+  city?: string;
+  price_per_hour?: number;
+  capacity?: number;
+  amenities?: string[];
+  is_active?: boolean;
+}
+
+export async function updateSpace(id: string, payload: SpaceUpdatePayload): Promise<Space> {
+  const data = await apiRequest<ApiSpace>(`/spaces/${id}`, { method: "PATCH", body: payload });
+  return mapSpace(data);
+}
+
 export async function fetchIncomingReservations(status?: string): Promise<IncomingReservation[]> {
   const query: Record<string, string> = {};
   if (status) query.status = status;

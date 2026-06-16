@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Pencil, ToggleLeft, ToggleRight } from "lucide-react";
 import {
-  fetchMySpaces, updateSpaceOffer, createSpace, fetchIncomingReservations,
-  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceType, IncomingReservation,
+  fetchMySpaces, updateSpaceOffer, updateSpace, createSpace, fetchIncomingReservations,
+  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceUpdatePayload, SpaceType, IncomingReservation,
 } from "@/lib/spaces";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
@@ -31,6 +31,7 @@ const MySpaces = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"spaces" | "reservations">("spaces");
   const [showCreate, setShowCreate] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
   const { data: me, isLoading: meLoading } = useMe();
 
   useEffect(() => {
@@ -92,6 +93,9 @@ const MySpaces = () => {
           {showCreate && (
             <CreateSpaceForm onClose={() => setShowCreate(false)} />
           )}
+          {editingSpace && (
+            <EditSpaceForm space={editingSpace} onClose={() => setEditingSpace(null)} />
+          )}
           {loadingSpaces ? (
             <div className="text-center py-20 text-muted-foreground">Cargando…</div>
           ) : spaces.length === 0 && !showCreate ? (
@@ -103,7 +107,7 @@ const MySpaces = () => {
             </div>
           ) : (
             <div className="space-y-5">
-              {spaces.map((s) => <SpaceOfferCard key={s.id} space={s} />)}
+              {spaces.map((s) => <SpaceOfferCard key={s.id} space={s} onEdit={() => setEditingSpace(s)} />)}
             </div>
           )}
         </>
@@ -283,14 +287,163 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
+// ── Editar espacio ─────────────────────────────────────────────────────────────
+
+const EditSpaceForm = ({ space, onClose }: { space: Space; onClose: () => void }) => {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<SpaceUpdatePayload>({
+    name: space.name,
+    type: space.type,
+    description: space.description,
+    address: space.location,
+    city: space.city,
+    price_per_hour: space.price,
+    capacity: space.capacity,
+    amenities: [...space.amenities],
+  });
+  const [amenityInput, setAmenityInput] = useState("");
+
+  const mut = useMutation({
+    mutationFn: () => updateSpace(space.id, form),
+    onSuccess: () => {
+      toast.success("Espacio actualizado");
+      qc.invalidateQueries({ queryKey: ["my-spaces"] });
+      qc.invalidateQueries({ queryKey: ["spaces"] });
+      onClose();
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar"),
+  });
+
+  const set = (field: keyof SpaceUpdatePayload, value: any) =>
+    setForm((f) => ({ ...f, [field]: value }));
+
+  const addAmenity = () => {
+    const v = amenityInput.trim();
+    if (v && !(form.amenities ?? []).includes(v)) set("amenities", [...(form.amenities ?? []), v]);
+    setAmenityInput("");
+  };
+
+  const removeAmenity = (a: string) =>
+    set("amenities", (form.amenities ?? []).filter((x) => x !== a));
+
+  return (
+    <div className="bg-card border border-primary/30 rounded-2xl p-6 mb-6 shadow-soft">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-lg">Editar: {space.name}</h2>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-1">Nombre *</label>
+          <input
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.name ?? ""} onChange={(e) => set("name", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Tipo *</label>
+          <select
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.type} onChange={(e) => set("type", e.target.value as SpaceType)}
+          >
+            {SPACE_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Ciudad *</label>
+          <input
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.city ?? ""} onChange={(e) => set("city", e.target.value)}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-1">Dirección *</label>
+          <input
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.address ?? ""} onChange={(e) => set("address", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Precio por hora (CLP) *</label>
+          <input
+            type="number" min={1000} step={1000}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.price_per_hour ?? 0} onChange={(e) => set("price_per_hour", Number(e.target.value))}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Capacidad (personas) *</label>
+          <input
+            type="number" min={1}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
+            value={form.capacity ?? 1} onChange={(e) => set("capacity", Number(e.target.value))}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-1">Descripción</label>
+          <textarea
+            rows={3}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none"
+            value={form.description ?? ""} onChange={(e) => set("description", e.target.value)}
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-1">Comodidades</label>
+          <div className="flex gap-2 mb-2">
+            <input
+              className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-sm"
+              value={amenityInput} onChange={(e) => setAmenityInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAmenity())}
+              placeholder="WiFi, Proyector, Estacionamiento…"
+            />
+            <Button type="button" variant="outline" size="sm" onClick={addAmenity}>Agregar</Button>
+          </div>
+          {(form.amenities ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {(form.amenities ?? []).map((a) => (
+                <span key={a} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-secondary">
+                  {a}
+                  <button onClick={() => removeAmenity(a)}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button
+          variant="hero"
+          disabled={mut.isPending || !form.name || !form.address || !form.city}
+          onClick={() => mut.mutate()}
+        >
+          {mut.isPending ? "Guardando…" : "Guardar cambios"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 // ── Card gestión de oferta ────────────────────────────────────────────────────
 
-const SpaceOfferCard = ({ space }: { space: Space }) => {
+const SpaceOfferCard = ({ space, onEdit }: { space: Space; onEdit: () => void }) => {
   const qc = useQueryClient();
   const [active, setActive] = useState(space.discountActive);
   const [type, setType] = useState<DiscountType>(space.discountType || "percentage");
   const [value, setValue] = useState<number>(space.discountValue || 10);
   const [minPeople, setMinPeople] = useState<number>(space.discountMinPeople || 2);
+  const [isActive, setIsActive] = useState(space.available);
 
   const mut = useMutation({
     mutationFn: () =>
@@ -308,15 +461,46 @@ const SpaceOfferCard = ({ space }: { space: Space }) => {
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "No se pudo guardar"),
   });
 
+  const toggleActiveMut = useMutation({
+    mutationFn: (next: boolean) => updateSpace(space.id, { is_active: next }),
+    onSuccess: (_, next) => {
+      setIsActive(next);
+      toast.success(next ? "Espacio activado" : "Espacio desactivado");
+      qc.invalidateQueries({ queryKey: ["my-spaces"] });
+      qc.invalidateQueries({ queryKey: ["spaces"] });
+    },
+    onError: () => toast.error("No se pudo cambiar el estado"),
+  });
+
   const preview = active && value ? Math.round(space.price * (1 - value / 100)) : space.price;
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col md:flex-row gap-4">
+    <div className={`bg-card border rounded-2xl p-5 shadow-soft flex flex-col md:flex-row gap-4 ${isActive ? "border-border" : "border-border opacity-60"}`}>
       <img src={space.image} alt={space.name} className="w-full md:w-40 h-32 object-cover rounded-xl" />
       <div className="flex-1">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="font-semibold">{space.name}</h3>
-          <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">{space.name}</h3>
+            {!isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Inactivo</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
+            <button
+              onClick={() => toggleActiveMut.mutate(!isActive)}
+              disabled={toggleActiveMut.isPending}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={isActive ? "Desactivar espacio" : "Activar espacio"}
+            >
+              {isActive ? <ToggleRight className="w-5 h-5 text-primary" /> : <ToggleLeft className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={onEdit}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Editar espacio"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 space-y-3">
