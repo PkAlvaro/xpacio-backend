@@ -1,7 +1,7 @@
 services:
   frontend:
     build:
-      context: ../find-book
+      context: ./find-book
       args:
         VITE_API_URL: /api/v1
         VITE_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}

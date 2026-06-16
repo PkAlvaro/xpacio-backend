@@ -14,3 +14,8 @@ htmlcov/
 *.log
 celerybeat-schedule
 celerybeat-schedule.db
+
+# Frontend
+find-book/node_modules/
+find-book/dist/
+find-book/.env
