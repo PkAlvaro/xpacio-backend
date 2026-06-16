@@ -105,10 +105,14 @@ const SpaceDetail = () => {
         <div>
           <h1 className="font-display text-3xl md:text-4xl font-bold">{space.name}</h1>
           <div className="flex items-center gap-3 mt-2 text-sm flex-wrap">
-            <span className="flex items-center gap-1">
-              <Star className="w-4 h-4 fill-foreground" /> {space.rating.toFixed(1)} ({space.review_count})
-            </span>
-            <span className="text-muted-foreground">·</span>
+            {space.review_count > 0 && (
+              <>
+                <span className="flex items-center gap-1">
+                  <Star className="w-4 h-4 fill-foreground" /> {space.rating.toFixed(1)} ({space.review_count})
+                </span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            )}
             <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {space.address}, {space.city}</span>
           </div>
         </div>
