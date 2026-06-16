@@ -28,10 +28,27 @@ const SpaceDetail = () => {
   const { data: space, isLoading } = useSpace(id);
   const { data: user } = useMe();
   const today = new Date().toISOString().slice(0, 10);
+
+  function nextAvailableSlot(): string {
+    const now = new Date();
+    let h = now.getHours();
+    let m = now.getMinutes() < 30 ? 30 : 0;
+    if (m === 0) h += 1;
+    if (h > 23) return "09:00";
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  const defaultStart = nextAvailableSlot();
+  const defaultEnd = (() => {
+    const [h, m] = defaultStart.split(":").map(Number);
+    const endH = h + 1;
+    return endH <= 23 ? `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}` : "23:00";
+  })();
+
   const [date, setDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
-  const [start, setStart] = useState("10:00");
-  const [end, setEnd] = useState("12:00");
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(defaultEnd);
   const [activeImg, setActiveImg] = useState(0);
   const [numPeopleStr, setNumPeopleStr] = useState("1");
 
@@ -192,8 +209,14 @@ const SpaceDetail = () => {
               onDateSelect={(d, t) => {
                 setDate(d);
                 if (d > endDate) setEndDate(d);
-                setStart(t.slice(0, 5));
-                const validEnds = generateSlots().filter(s => s > t.slice(0, 5));
+                // Snap to next available slot if clicking past time on today
+                let selectedTime = t.slice(0, 5);
+                if (d === today) {
+                  const minSlot = nextAvailableSlot();
+                  if (selectedTime < minSlot) selectedTime = minSlot;
+                }
+                setStart(selectedTime);
+                const validEnds = generateSlots().filter(s => s > selectedTime);
                 if (validEnds.length > 0) setEnd(validEnds[0]);
               }}
             />

@@ -19,6 +19,10 @@ interface Props {
 export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, selectedEndDate, selectedStart, selectedEnd }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [range, setRange] = useState({ start: today, end: today });
+
+  const now = new Date();
+  const scrollHour = Math.max(7, now.getHours() - 1);
+  const scrollTime = `${String(scrollHour).padStart(2, "0")}:00:00`;
   const calRef = useRef<FullCalendar>(null);
 
   const { data: events = [] } = useSpaceCalendar(spaceId, range.start, range.end);
@@ -100,6 +104,7 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, 
         slotMinTime="07:00:00"
         slotMaxTime="23:30:00"
         slotDuration="00:30:00"
+        scrollTime={scrollTime}
         allDaySlot={false}
         nowIndicator
         selectable={!!onDateSelect}
