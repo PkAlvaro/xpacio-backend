@@ -34,14 +34,16 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend api worker beat
 
             echo "=== Wait for health ==="
+            API_ID=$(docker compose -f docker-compose.prod.yml ps -q api)
             for i in $(seq 1 18); do
-              STATUS=$(docker compose -f docker-compose.prod.yml ps api --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['Health'] if d else 'unknown')" 2>/dev/null || echo "unknown")
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_ID" 2>/dev/null || echo "unknown")
+              echo "  [${i}] health=$STATUS"
               if [ "$STATUS" = "healthy" ]; then
                 echo "API healthy after ${i}0s"
                 break
               fi
               if [ "$i" -eq 18 ]; then
-                echo "API never became healthy — deploy may have failed"
+                echo "API never became healthy — deploy failed"
                 docker compose -f docker-compose.prod.yml logs api --tail=50
                 exit 1
               fi
