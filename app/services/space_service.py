@@ -5,7 +5,7 @@ import secrets
 import unicodedata
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, or_, text
+from sqlalchemy import select, and_, func, or_
 from sqlalchemy.orm import selectinload
 import redis.asyncio as aioredis
 
@@ -145,7 +145,7 @@ async def resolve_space(id_or_slug: str, session: AsyncSession) -> Space:
 
 
 async def list_spaces(filters: SpaceFilters, session: AsyncSession) -> tuple[list[SpaceListItem], int]:
-    query = select(Space).where(Space.is_active == True, Space.parent_id == None)
+    query = select(Space).where(Space.is_active.is_(True), Space.parent_id.is_(None))
 
     if filters.type:
         query = query.where(Space.type == filters.type)
@@ -160,7 +160,7 @@ async def list_spaces(filters: SpaceFilters, session: AsyncSession) -> tuple[lis
     if filters.min_capacity:
         query = query.where(Space.capacity >= filters.min_capacity)
     if filters.on_offer:
-        query = query.where(Space.discount_active == True)
+        query = query.where(Space.discount_active.is_(True))
 
     count_result = await session.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar_one()
@@ -235,7 +235,7 @@ async def get_similar_spaces(space_id: uuid.UUID, session: AsyncSession, limit: 
     same_type = await session.execute(
         select(Space)
         .options(selectinload(Space.images))
-        .where(Space.id != space_id, Space.is_active == True, Space.type == base.type)
+        .where(Space.id != space_id, Space.is_active.is_(True), Space.type == base.type)
         .order_by(Space.rating.desc(), Space.review_count.desc())
         .limit(limit)
     )
@@ -249,7 +249,7 @@ async def get_similar_spaces(space_id: uuid.UUID, session: AsyncSession, limit: 
             .options(selectinload(Space.images))
             .where(
                 Space.id.notin_(have_ids),
-                Space.is_active == True,
+                Space.is_active.is_(True),
                 (func.lower(Space.city) == base.city.lower())
                 | and_(Space.price_per_hour >= price_low, Space.price_per_hour <= price_high),
             )
@@ -264,7 +264,7 @@ async def get_similar_spaces(space_id: uuid.UUID, session: AsyncSession, limit: 
         fallback = await session.execute(
             select(Space)
             .options(selectinload(Space.images))
-            .where(Space.is_active == True, Space.id.notin_(have_ids))
+            .where(Space.is_active.is_(True), Space.id.notin_(have_ids))
             .order_by(Space.rating.desc(), Space.review_count.desc())
             .limit(limit - len(spaces))
         )
@@ -288,8 +288,8 @@ async def suggest_spaces(q: str, session: AsyncSession, limit: int = 8) -> list[
         select(Space, sim_expr.label("score"))
         .options(selectinload(Space.images))
         .where(
-            Space.is_active == True,
-            Space.parent_id == None,
+            Space.is_active.is_(True),
+            Space.parent_id.is_(None),
             or_(
                 sim_expr > 0.05,
                 func.lower(Space.name).contains(q.lower()),
@@ -323,7 +323,7 @@ async def list_sub_spaces(space_id: uuid.UUID, session: AsyncSession) -> list[Sp
     result = await session.execute(
         select(Space)
         .options(selectinload(Space.images), selectinload(Space.amenities))
-        .where(Space.parent_id == space_id, Space.is_active == True)
+        .where(Space.parent_id == space_id, Space.is_active.is_(True))
         .order_by(Space.price_per_hour.asc())
     )
     return list(result.scalars().all())
@@ -448,7 +448,7 @@ async def admin_list_spaces(
     from app.schemas.space import AdminSpaceListItem
     from app.models.user import User
 
-    query = select(Space).where(Space.parent_id == None)
+    query = select(Space).where(Space.parent_id.is_(None))
     if q:
         query = query.where(func.lower(Space.name).contains(q.lower()))
     if active_only is not None:
@@ -644,8 +644,8 @@ async def admin_stats(session: AsyncSession) -> dict:
     from app.models.reservation import Reservation
     from app.models.user import User
 
-    total_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.parent_id == None))).scalar_one()
-    active_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.is_active == True, Space.parent_id == None))).scalar_one()
+    total_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.parent_id.is_(None)))).scalar_one()
+    active_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.is_active.is_(True), Space.parent_id.is_(None)))).scalar_one()
     total_users = (await session.execute(select(func.count()).select_from(User))).scalar_one()
     total_reservations = (await session.execute(select(func.count()).select_from(Reservation))).scalar_one()
 

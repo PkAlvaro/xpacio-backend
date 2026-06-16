@@ -1,6 +1,6 @@
 import asyncio
 import structlog
-from sqlalchemy import select, and_, update
+from sqlalchemy import and_, update
 from app.workers.celery_app import celery_app
 from app.constants import ReservationStatus
 from app.utils.time_utils import now_chile
@@ -9,7 +9,7 @@ logger = structlog.get_logger()
 
 
 def _get_session():
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     from app.config import get_settings
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
@@ -52,7 +52,6 @@ async def _expire_pending():
 
 async def _transition_states():
     from app.models.reservation import Reservation
-    from datetime import datetime
     SessionLocal = _get_session()
     now = now_chile()
     today = now.date()

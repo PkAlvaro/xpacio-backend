@@ -549,7 +549,7 @@ async def seed() -> None:
         await session.commit()
         total = len(SPACES) + len(VENUES_REALES) + sum(len(v.get("sub_spaces", [])) for v in VENUES_REALES)
         print(f"[seed] Creados {total} espacios demo ({len(VENUES_REALES)} venues reales con sub-espacios).")
-        print(f"Credenciales: anfitrion@xpacio.cl / xpacio1234")
+        print("Credenciales: anfitrion@xpacio.cl / xpacio1234")
 
 
 async def seed_venues() -> None:

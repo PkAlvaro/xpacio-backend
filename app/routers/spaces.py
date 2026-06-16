@@ -4,10 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
 from app.database import get_session
-from app.dependencies import get_redis, get_current_user, require_role
+from app.dependencies import get_redis, require_role
 from app.constants import UserRole
 from app.schemas.space import (
-    SpaceCreate, SpaceUpdate, SpaceResponse, SpaceListItem,
+    SpaceCreate, SpaceUpdate, SpaceResponse,
     SpaceFilters, ScheduleCreate, SpaceScheduleOut, SubSpaceItem, SpaceImageOut,
 )
 from app.exceptions import DomainException

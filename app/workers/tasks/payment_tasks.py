@@ -25,7 +25,6 @@ def reconcile_stale_payments():
 
 async def _reconcile():
     from app.models.payment import Payment
-    from app.models.reservation import Reservation
     from app.services.reservation_service import confirm_reservation
     from app.config import get_settings
     from datetime import timedelta

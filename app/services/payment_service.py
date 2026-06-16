@@ -11,7 +11,6 @@ from app.constants import PaymentStatus, PaymentProvider, ReservationStatus
 from app.exceptions import NotFoundError, DomainException, ForbiddenError
 from app.services.reservation_service import confirm_reservation
 from app.services import email_service
-from sqlalchemy.exc import IntegrityError
 from app.config import get_settings
 from app.utils.time_utils import now_chile
 

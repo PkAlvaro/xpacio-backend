@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models.reservation import Reservation
 from app.models.space import Space
-from app.constants import ReservationStatus, CancellationPolicy, PENDING_RESERVATION_TTL_MINUTES
+from app.constants import ReservationStatus, PENDING_RESERVATION_TTL_MINUTES
 from app.exceptions import ConflictError, NotFoundError, ForbiddenError, DomainException
 from app.schemas.reservation import ReservationCreate
 from app.utils.time_utils import now_chile, combine_chile
@@ -23,7 +23,7 @@ async def create_reservation(
     session: AsyncSession,
 ) -> Reservation:
     # load space to get price
-    space_result = await session.execute(select(Space).where(Space.id == data.space_id, Space.is_active == True))
+    space_result = await session.execute(select(Space).where(Space.id == data.space_id, Space.is_active.is_(True)))
     space = space_result.scalar_one_or_none()
     if not space:
         raise NotFoundError("Espacio")
@@ -180,7 +180,6 @@ async def list_client_reservations(
     status: ReservationStatus | None = None,
 ) -> list[dict]:
     from app.models.space import Space
-    from sqlalchemy import outerjoin
     query = (
         select(Reservation, Space.name.label("space_name"))
         .outerjoin(Space, Space.id == Reservation.space_id)

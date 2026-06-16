@@ -99,7 +99,6 @@ async def refresh_tokens(
     await redis.delete(f"{REFRESH_PREFIX}{token_data.jti}")
 
     # issue new pair
-    from app.models.user import User as UserModel
     # reconstruct User mini-object for token building
     class _Mini:
         id = uuid.UUID(stored)

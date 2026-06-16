@@ -36,11 +36,14 @@ test-integration: ## Run only integration tests
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 lint: ## Run ruff linter
-	ruff check app/ tests/
+	ruff check app/ tests/ --select E,F,W --ignore E501
 
 fmt: ## Auto-fix and format with ruff
-	ruff check app/ tests/ --fix
+	ruff check app/ tests/ --select E,F,W --ignore E501 --fix
 	ruff format app/ tests/
+
+precommit-install: ## Install pre-commit hooks (run once per clone)
+	pre-commit install
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
