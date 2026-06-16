@@ -34,14 +34,12 @@ jobs:
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend api worker beat
 
             echo "=== Wait for health ==="
-            API_ID=$(docker compose -f docker-compose.prod.yml ps -q api)
             for i in $(seq 1 18); do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$API_ID" 2>/dev/null || echo "unknown")
-              echo "  [${i}] health=$STATUS"
-              if [ "$STATUS" = "healthy" ]; then
+              if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
                 echo "API healthy after ${i}0s"
                 break
               fi
+              echo "  [${i}] waiting..."
               if [ "$i" -eq 18 ]; then
                 echo "API never became healthy — deploy failed"
                 docker compose -f docker-compose.prod.yml logs api --tail=50
