@@ -31,11 +31,9 @@ const SpaceDetail = () => {
 
   function nextAvailableSlot(): string {
     const now = new Date();
-    let h = now.getHours();
-    let m = now.getMinutes() < 30 ? 30 : 0;
-    if (m === 0) h += 1;
+    const h = now.getMinutes() > 0 ? now.getHours() + 1 : now.getHours();
     if (h > 23) return "09:00";
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    return `${String(Math.max(7, h)).padStart(2, "0")}:00`;
   }
 
   const defaultStart = nextAvailableSlot();
@@ -448,7 +446,6 @@ function generateSlots(): string[] {
   const slots: string[] = [];
   for (let h = 7; h <= 23; h++) {
     slots.push(`${String(h).padStart(2, "0")}:00`);
-    if (h < 23) slots.push(`${String(h).padStart(2, "0")}:30`);
   }
   return slots;
 }

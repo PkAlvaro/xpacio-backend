@@ -102,8 +102,8 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, 
         events={[...events, ...selectionEvent]}
         businessHours={businessHours.length > 0 ? businessHours : undefined}
         slotMinTime="07:00:00"
-        slotMaxTime="23:30:00"
-        slotDuration="00:30:00"
+        slotMaxTime="23:00:00"
+        slotDuration="01:00:00"
         scrollTime={scrollTime}
         allDaySlot={false}
         nowIndicator
