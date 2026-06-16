@@ -11,7 +11,7 @@ from app.constants import UserRole
 from app.models.user import User
 from app.models.provider import Provider
 from app.schemas.auth import ChangeRoleRequest, ToggleActiveRequest, UserResponse
-from app.schemas.space import AdminSpaceCreate, AdminSpaceUpdate, AdminSpaceListItem, SpaceImageOut, SpaceResponse, SpaceScheduleOut, ScheduleCreate
+from app.schemas.space import AdminSpaceCreate, AdminSpaceUpdate, SpaceImageOut, SpaceResponse, SpaceScheduleOut, ScheduleCreate
 from app.exceptions import NotFoundError, DomainException
 from app.services import auth_service, space_service
 

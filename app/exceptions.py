@@ -41,7 +41,7 @@ async def domain_exception_handler(request: Request, exc: DomainException) -> JS
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    errors = [{"field": ".".join(str(l) for l in e["loc"]), "msg": e["msg"]} for e in exc.errors()]
+    errors = [{"field": ".".join(str(loc) for loc in e["loc"]), "msg": e["msg"]} for e in exc.errors()]
     return _error_response(422, "Error de validación", detail=errors)
 
 

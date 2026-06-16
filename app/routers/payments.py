@@ -1,7 +1,6 @@
 import uuid
-from fastapi import APIRouter, Depends, Query, Request, Body
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
-from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
