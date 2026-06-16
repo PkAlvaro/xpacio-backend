@@ -6,7 +6,8 @@ import {
   fetchMySpaces, updateSpaceOffer, createSpace, fetchIncomingReservations,
   formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceType, IncomingReservation,
 } from "@/lib/spaces";
-import { isAuthenticated, getRole, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useMe } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -30,26 +31,28 @@ const MySpaces = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"spaces" | "reservations">("spaces");
   const [showCreate, setShowCreate] = useState(false);
+  const { data: me, isLoading: meLoading } = useMe();
 
   useEffect(() => {
-    if (!isAuthenticated()) {
+    if (meLoading) return;
+    if (!me) {
       navigate("/login");
-    } else if (getRole() !== "provider" && getRole() !== "admin") {
+    } else if (me.role !== "provider" && me.role !== "admin") {
       toast.error("Necesitas una cuenta de anfitrión");
       navigate("/");
     }
-  }, [navigate]);
+  }, [me, meLoading, navigate]);
 
   const { data: spaces = [], isLoading: loadingSpaces } = useQuery({
     queryKey: ["my-spaces"],
     queryFn: fetchMySpaces,
-    enabled: isAuthenticated(),
+    enabled: !!me,
   });
 
   const { data: incoming = [], isLoading: loadingIncoming } = useQuery({
     queryKey: ["incoming-reservations"],
     queryFn: () => fetchIncomingReservations(),
-    enabled: isAuthenticated() && tab === "reservations",
+    enabled: !!me && tab === "reservations",
   });
 
   return (

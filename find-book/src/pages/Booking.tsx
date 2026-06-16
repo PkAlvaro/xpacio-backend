@@ -3,7 +3,8 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Calendar, Clock, MapPin, Users } from "lucide-react";
 import { fetchSpace, formatCLP } from "@/lib/spaces";
-import { api, isAuthenticated, ApiError } from "@/lib/api";
+import { apiRequest, getAccessToken, ApiError } from "@/lib/api";
+import type { ApiResponse } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -50,22 +51,23 @@ const Booking = () => {
   const estTotal = effectivePerHour * state.hours;
 
   const confirm = async () => {
-    if (!isAuthenticated()) {
+    if (!getAccessToken()) {
       toast.error("Inicia sesión para reservar");
       return navigate("/login");
     }
     setLoading(true);
     try {
-      const reservation = await api<ReservationResponse>("/reservations", {
+      const res = await apiRequest<ApiResponse<ReservationResponse>>("/reservations", {
         method: "POST",
-        body: {
+        body: JSON.stringify({
           space_id: state.spaceId,
           date: state.date,
           start_time: state.start,
           end_time: state.end,
           num_people: state.numPeople || 1,
-        },
+        }),
       });
+      const reservation = res.data!;
       navigate("/pago", { state: { ...state, reservation } });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "No se pudo crear la reserva";
