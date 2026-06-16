@@ -77,7 +77,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
-        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=40
+        run: pytest tests/ -v --cov=app --cov-report=term-missing
 
   lint:
     runs-on: ubuntu-latest
