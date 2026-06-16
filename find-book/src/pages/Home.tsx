@@ -99,7 +99,7 @@ const Home = () => {
           </div>
         ) : (
           <div className="text-center py-20 text-muted-foreground">
-            {tab === "offers" ? "No hay espacios en oferta por ahora." : "Todavía no hay espacios publicados."}
+            Todavía no hay espacios publicados.
           </div>
         )}
       </section>
