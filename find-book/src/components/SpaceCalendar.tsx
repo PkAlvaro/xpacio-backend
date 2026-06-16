@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -10,20 +10,40 @@ interface Props {
   spaceId: string;
   schedules: { day_of_week: number; open_time: string; close_time: string }[];
   onDateSelect?: (date: string, start: string) => void;
+  selectedDate?: string;
+  selectedStart?: string;
 }
 
-export function SpaceCalendar({ spaceId, schedules, onDateSelect }: Props) {
+export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, selectedStart }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [range, setRange] = useState({ start: today, end: today });
   const calRef = useRef<FullCalendar>(null);
 
   const { data: events = [] } = useSpaceCalendar(spaceId, range.start, range.end);
 
+  // Formulario → calendario: navegar a la semana de la fecha seleccionada
+  useEffect(() => {
+    if (!selectedDate || !calRef.current) return;
+    const api = calRef.current.getApi();
+    api.gotoDate(selectedDate);
+  }, [selectedDate]);
+
   const businessHours = schedules.map((s) => ({
     daysOfWeek: [s.day_of_week === 6 ? 0 : s.day_of_week + 1],
     startTime: s.open_time,
     endTime: s.close_time,
   }));
+
+  // Marcador del slot seleccionado en el formulario
+  const selectionEvent = selectedDate && selectedStart
+    ? [{
+        id: "__selected__",
+        start: `${selectedDate}T${selectedStart}`,
+        end: `${selectedDate}T${selectedStart}`,
+        display: "background",
+        color: "hsl(var(--primary) / 0.25)",
+      }]
+    : [];
 
   function handleDatesSet(arg: DatesSetArg) {
     setRange({
@@ -32,7 +52,7 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect }: Props) {
     });
   }
 
-  function handleDateClick(info: { dateStr: string; date: Date }) {
+  function handleDateClick(info: { dateStr: string }) {
     if (onDateSelect) {
       const date = info.dateStr.slice(0, 10);
       const time = info.dateStr.slice(11, 16) || "10:00";
@@ -68,7 +88,7 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect }: Props) {
           right: "dayGridMonth,timeGridWeek",
         }}
         buttonText={{ today: "Hoy", month: "Mes", week: "Semana" }}
-        events={events}
+        events={[...events, ...selectionEvent]}
         businessHours={businessHours.length > 0 ? businessHours : undefined}
         slotMinTime="07:00:00"
         slotMaxTime="23:30:00"

@@ -178,6 +178,8 @@ const SpaceDetail = () => {
             <SpaceCalendar
               spaceId={space.id}
               schedules={space.schedules}
+              selectedDate={date}
+              selectedStart={start}
               onDateSelect={(d, t) => {
                 setDate(d);
                 setStart(t.slice(0, 5));
