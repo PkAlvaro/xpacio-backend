@@ -221,7 +221,7 @@ const SpaceDetail = () => {
                   {generateSlots().filter(t => t > start).map((t) => <option key={t}>{t}</option>)}
                 </select>
               </div>
-            )}
+            </div>
 
             <div className="mb-5">
               <label className="block text-xs font-semibold mb-1">Número de personas</label>
