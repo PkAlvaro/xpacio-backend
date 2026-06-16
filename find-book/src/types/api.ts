@@ -150,6 +150,7 @@ export interface Reservation {
   space_name?: string | null;
   client_id: string;
   date: string;
+  end_date?: string | null;
   start_time: string;
   end_time: string;
   hours: number;

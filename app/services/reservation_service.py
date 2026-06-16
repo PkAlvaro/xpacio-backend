@@ -30,14 +30,35 @@ async def create_reservation(
 
     # calculate total — SC-001: precio server-side con descuento aplicado
     from app.services.space_service import calculate_price
+    effective_end_date = data.end_date or data.date
     start_dt = combine_chile(data.date, data.start_time)
-    end_dt = combine_chile(data.date, data.end_time)
-    duration_minutes = (end_dt - start_dt).seconds // 60
+    end_dt = combine_chile(effective_end_date, data.end_time)
+    duration_minutes = int((end_dt - start_dt).total_seconds() // 60)
     hours = math.ceil(duration_minutes / 60)
     num_people = getattr(data, "num_people", 1) or 1
     pricing = calculate_price(space, hours, num_people)
     subtotal = pricing["subtotal"]
-    total = pricing["total"]  # subtotal con descuento, sin service fee para MVP
+    total = pricing["total"]
+
+    # Overlap check — DB constraint dropped (was single-day only); check here
+    overlap_result = await session.execute(
+        select(Reservation).where(
+            and_(
+                Reservation.space_id == data.space_id,
+                Reservation.status.not_in([ReservationStatus.CANCELLED, ReservationStatus.EXPIRED]),
+                or_(
+                    Reservation.expires_at == None,  # noqa: E711
+                    Reservation.expires_at > now_chile(),
+                ),
+            )
+        )
+    )
+    for existing in overlap_result.scalars().all():
+        ex_end_date = existing.end_date or existing.date
+        ex_start = combine_chile(existing.date, existing.start_time)
+        ex_end = combine_chile(ex_end_date, existing.end_time)
+        if start_dt < ex_end and end_dt > ex_start:
+            raise ConflictError("El horario seleccionado no está disponible")
 
     expires_at = now_chile() + timedelta(minutes=PENDING_RESERVATION_TTL_MINUTES)
 
@@ -46,6 +67,7 @@ async def create_reservation(
         space_id=data.space_id,
         client_id=client_id,
         date=data.date,
+        end_date=data.end_date,
         start_time=data.start_time,
         end_time=data.end_time,
         hours=hours,

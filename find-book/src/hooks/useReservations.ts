@@ -19,6 +19,7 @@ export function useCreateReservation() {
     mutationFn: async (vars: {
       space_id: string;
       date: string;
+      end_date?: string;
       start_time: string;
       end_time: string;
       num_people?: number;

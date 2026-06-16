@@ -24,8 +24,9 @@ async def get_calendar_events(
         select(Reservation).where(
             and_(
                 Reservation.space_id == space_id,
-                Reservation.date >= start_date,
+                # include multi-day reservations that overlap the requested range
                 Reservation.date <= end_date,
+                or_(Reservation.end_date == None, Reservation.end_date >= start_date),  # noqa: E711
                 Reservation.status.in_([
                     ReservationStatus.CONFIRMED,
                     ReservationStatus.ACTIVE,
@@ -42,8 +43,9 @@ async def get_calendar_events(
 
     events = []
     for r in reservations:
+        effective_end_date = r.end_date or r.date
         start_str = f"{r.date}T{str(r.start_time)[:5]}"
-        end_str = f"{r.date}T{str(r.end_time)[:5]}"
+        end_str = f"{effective_end_date}T{str(r.end_time)[:5]}"
         events.append({
             "id": str(r.id),
             "title": "Ocupado",

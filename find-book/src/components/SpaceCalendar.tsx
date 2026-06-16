@@ -11,11 +11,12 @@ interface Props {
   schedules: { day_of_week: number; open_time: string; close_time: string }[];
   onDateSelect?: (date: string, start: string) => void;
   selectedDate?: string;
+  selectedEndDate?: string;
   selectedStart?: string;
   selectedEnd?: string;
 }
 
-export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, selectedStart, selectedEnd }: Props) {
+export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, selectedEndDate, selectedStart, selectedEnd }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [range, setRange] = useState({ start: today, end: today });
   const calRef = useRef<FullCalendar>(null);
@@ -35,12 +36,13 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, 
     endTime: s.close_time,
   }));
 
-  // Marcador del rango seleccionado en el formulario
+  // Marcador del rango seleccionado en el formulario (soporta multi-día)
+  const effectiveEndDate = selectedEndDate || selectedDate;
   const selectionEvent = selectedDate && selectedStart && selectedEnd
     ? [{
         id: "__selected__",
         start: `${selectedDate}T${selectedStart}`,
-        end: `${selectedDate}T${selectedEnd}`,
+        end: `${effectiveEndDate}T${selectedEnd}`,
         display: "background",
         color: "hsl(var(--primary) / 0.3)",
       }]

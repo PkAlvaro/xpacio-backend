@@ -29,6 +29,7 @@ const SpaceDetail = () => {
   const { data: user } = useMe();
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("12:00");
   const [activeImg, setActiveImg] = useState(0);
@@ -55,7 +56,8 @@ const SpaceDetail = () => {
   const images = space.images.length > 0 ? space.images.map(i => i.url) : [PLACEHOLDER];
   const startMins = toMinutes(start);
   const endMins = toMinutes(end);
-  const hours = Math.max(0, Math.ceil((endMins - startMins) / 60));
+  const daysDiff = Math.max(0, (new Date(endDate).getTime() - new Date(date).getTime()) / 86400000);
+  const hours = Math.max(0, Math.ceil(daysDiff * 24 + (endMins - startMins) / 60));
   const numPeople = Math.max(1, Math.min(space.capacity, parseInt(numPeopleStr, 10) || 1));
   const isVolume = space.discount_type === "volume";
   const isPercentage = space.discount_type === "percentage";
@@ -77,12 +79,14 @@ const SpaceDetail = () => {
       return;
     }
     if (hours <= 0) return toast.error("El horario de fin debe ser posterior al inicio");
+    if (endDate < date) return toast.error("La fecha de fin no puede ser anterior a la de inicio");
     if (!slotAvailable) return toast.error("El horario seleccionado no está disponible");
 
     try {
       const reservation = await createReservation.mutateAsync({
         space_id: space.id,
         date,
+        end_date: endDate !== date ? endDate : undefined,
         start_time: start + ":00",
         end_time: end + ":00",
         num_people: numPeople,
@@ -182,10 +186,12 @@ const SpaceDetail = () => {
               spaceId={space.id}
               schedules={space.schedules}
               selectedDate={date}
+              selectedEndDate={endDate}
               selectedStart={start}
               selectedEnd={end}
               onDateSelect={(d, t) => {
                 setDate(d);
+                if (d > endDate) setEndDate(d);
                 setStart(t.slice(0, 5));
                 const validEnds = generateSlots().filter(s => s > t.slice(0, 5));
                 if (validEnds.length > 0) setEnd(validEnds[0]);
@@ -206,13 +212,34 @@ const SpaceDetail = () => {
                 <span className="text-muted-foreground">/ hora</span>
               </div>
 
-              <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
-                <CalIcon className="w-3 h-3" /> Fecha seleccionada
-              </label>
-              <div className="w-full px-3 py-2.5 rounded-xl border border-border bg-background mb-3 text-sm">
-                {date
-                  ? new Date(date + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
-                  : "Haz clic en el calendario"}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                    <CalIcon className="w-3 h-3" /> Fecha inicio
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    min={today}
+                    onChange={(e) => {
+                      setDate(e.target.value);
+                      if (e.target.value > endDate) setEndDate(e.target.value);
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                    <CalIcon className="w-3 h-3" /> Fecha fin
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={date}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-3">
