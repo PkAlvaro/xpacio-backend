@@ -4,9 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from app.limiter import limiter
 
 from app.config import get_settings
 from app.logging_config import configure_logging
@@ -23,9 +23,6 @@ from app.routers.payments import router_stripe, router_transbank, router_shared 
 configure_logging()
 logger = structlog.get_logger()
 settings = get_settings()
-
-limiter = Limiter(key_func=get_remote_address)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

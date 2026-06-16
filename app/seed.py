@@ -290,6 +290,192 @@ SPACES = [
 ]
 
 
+# ── Venues reales de Santiago con sub-espacios ────────────────────────────────
+# Cada venue tiene sub_spaces: salas/áreas que se reservan individualmente.
+VENUES_REALES = [
+    dict(
+        provider_idx=0,
+        name="GAM - Centro Gabriela Mistral",
+        type=SpaceType.SALON,
+        address="Av. Libertador Bernardo O'Higgins 227",
+        city="Santiago",
+        lat=-33.4442, lng=-70.6535,
+        price=80000, capacity=1000, rating=4.9, reviews=412,
+        description="Ícono cultural de Santiago, el GAM ofrece salas de teatro, espacios de exposición y terrazas para eventos públicos y privados. Centro de artes y cultura en plena Alameda.",
+        amenities=["Estacionamiento", "Restaurante", "Cafetería", "WiFi", "Acceso universal"],
+        discount=None,
+        schedule=[(0, 6, "09:00", "22:00")],
+        sub_spaces=[
+            dict(provider_idx=0, name="GAM - Sala A1", type=SpaceType.SALA,
+                 address="Av. Libertador Bernardo O'Higgins 227", city="Santiago",
+                 lat=-33.4442, lng=-70.6535, price=45000, capacity=220, rating=4.9, reviews=189,
+                 description="Sala de teatro con graderías en U, ideal para obras, conferencias y presentaciones de hasta 220 personas. Equipo de iluminación y sonido profesional integrado.",
+                 amenities=["Iluminación profesional", "Sonido profesional", "Cabina técnica", "Camarines", "Proyector"],
+                 discount=None, schedule=[(0, 6, "09:00", "23:00")]),
+            dict(provider_idx=0, name="GAM - Sala A2", type=SpaceType.SALA,
+                 address="Av. Libertador Bernardo O'Higgins 227", city="Santiago",
+                 lat=-33.4442, lng=-70.6535, price=35000, capacity=150, rating=4.8, reviews=142,
+                 description="Sala multipropósito con piso de madera, ideal para talleres, ensayos de danza y eventos corporativos medianos.",
+                 amenities=["Piso de madera", "Espejos", "Sonido", "Proyector", "Camarines"],
+                 discount=None, schedule=[(0, 6, "09:00", "22:00")]),
+            dict(provider_idx=0, name="GAM - Sala Isidora Zegers", type=SpaceType.SALA,
+                 address="Av. Libertador Bernardo O'Higgins 227", city="Santiago",
+                 lat=-33.4442, lng=-70.6535, price=28000, capacity=80, rating=4.7, reviews=98,
+                 description="Sala íntima para conciertos de cámara, presentaciones literarias y seminarios. Acústica cuidada y ambiente recogido.",
+                 amenities=["Acústica profesional", "Piano de cola", "Proyector", "Climatización"],
+                 discount=dict(type=DiscountType.PERCENTAGE, value=10, active=True, min_people=None),
+                 schedule=[(0, 6, "10:00", "22:00")]),
+            dict(provider_idx=0, name="GAM - Terraza", type=SpaceType.TERRAZA,
+                 address="Av. Libertador Bernardo O'Higgins 227", city="Santiago",
+                 lat=-33.4442, lng=-70.6535, price=55000, capacity=300, rating=4.9, reviews=67,
+                 description="Terraza al aire libre en el techo del GAM con vistas a la Alameda y los cerros. Perfecta para lanzamientos, cocteles y eventos al atardecer.",
+                 amenities=["Vista panorámica", "Bar móvil", "Iluminación ambiental", "Calefactores", "Acceso exclusivo"],
+                 discount=None, schedule=[(3, 6, "16:00", "23:00")]),
+        ],
+    ),
+
+    dict(
+        provider_idx=2,
+        name="Casona San Isidro - Barrio Italia",
+        type=SpaceType.SALON,
+        address="San Isidro 63",
+        city="Santiago",
+        lat=-33.4510, lng=-70.6480,
+        price=60000, capacity=300, rating=4.8, reviews=234,
+        description="Casona patrimonial de 1900 restaurada en el corazón de Barrio Italia. Patios interiores, salones con techos de 5 metros y jardín privado. El espacio favorito para matrimonios y eventos boutique en Santiago.",
+        amenities=["Jardín privado", "Patios interiores", "Estacionamiento", "Cocina industrial", "WiFi"],
+        discount=None,
+        schedule=[(4, 6, "12:00", "02:00")],
+        sub_spaces=[
+            dict(provider_idx=2, name="Casona San Isidro - Salón Principal", type=SpaceType.SALON,
+                 address="San Isidro 63", city="Santiago",
+                 lat=-33.4510, lng=-70.6480, price=55000, capacity=180, rating=4.9, reviews=156,
+                 description="Salón central de la casona con techos de 5 metros, vigas originales y ventanales hacia el jardín. Capacidad para banquetes y eventos formales.",
+                 amenities=["Techos altos", "Vigas originales", "Sonido", "Iluminación decorativa", "Mesas y sillas"],
+                 discount=None, schedule=[(4, 6, "12:00", "02:00")]),
+            dict(provider_idx=2, name="Casona San Isidro - Patio Central", type=SpaceType.TERRAZA,
+                 address="San Isidro 63", city="Santiago",
+                 lat=-33.4510, lng=-70.6480, price=40000, capacity=120, rating=4.8, reviews=89,
+                 description="Patio colonial empedrado con fuente central. Ideal para cócteles de recepción, ceremonias al aire libre y fotosesiones.",
+                 amenities=["Fuente colonial", "Empedrado original", "Iluminación string lights", "Calefactores"],
+                 discount=dict(type=DiscountType.PERCENTAGE, value=15, active=True, min_people=None),
+                 schedule=[(4, 6, "12:00", "01:00")]),
+            dict(provider_idx=2, name="Casona San Isidro - Sala de Reuniones", type=SpaceType.SALA,
+                 address="San Isidro 63", city="Santiago",
+                 lat=-33.4510, lng=-70.6480, price=18000, capacity=20, rating=4.7, reviews=44,
+                 description="Sala histórica con chimenea y mobiliario de época, perfecta para reuniones ejecutivas íntimas o sesiones creativas.",
+                 amenities=["Chimenea", "Mobiliario de época", "Proyector", "WiFi", "Servicio de café"],
+                 discount=None, schedule=[(0, 5, "09:00", "20:00")]),
+        ],
+    ),
+
+    dict(
+        provider_idx=1,
+        name="Centro de Artes Escénicas Matucana 100",
+        type=SpaceType.SALON,
+        address="Matucana 100",
+        city="Santiago",
+        lat=-33.4435, lng=-70.6680,
+        price=70000, capacity=500, rating=4.7, reviews=318,
+        description="Centro cultural en antigua maestranza ferroviaria. Espacio icónico del barrio Yungay con salas de teatro, galería y gran patio para festivales. Referente de la cultura independiente en Santiago.",
+        amenities=["Patio de eventos", "Bar", "Galería de arte", "Camarines", "Estacionamiento"],
+        discount=None,
+        schedule=[(0, 6, "10:00", "23:00")],
+        sub_spaces=[
+            dict(provider_idx=1, name="Matucana 100 - Teatro Principal", type=SpaceType.SALA,
+                 address="Matucana 100", city="Santiago",
+                 lat=-33.4435, lng=-70.6680, price=65000, capacity=300, rating=4.8, reviews=201,
+                 description="Teatro con estructura industrial original, graderías y escenario elevado. Referente para obras de teatro, conciertos alternativos y presentaciones performativas.",
+                 amenities=["Escenario elevado", "Graderías", "Iluminación escénica", "Sonido profesional", "Camarines"],
+                 discount=None, schedule=[(0, 6, "10:00", "23:00")]),
+            dict(provider_idx=1, name="Matucana 100 - Galpón", type=SpaceType.SALON,
+                 address="Matucana 100", city="Santiago",
+                 lat=-33.4435, lng=-70.6680, price=50000, capacity=500, rating=4.7, reviews=134,
+                 description="Enorme galpón de altura libre para festivales, ferias de arte, mercados y eventos masivos. Piso de hormigón y estructura industrial a la vista.",
+                 amenities=["Altura libre 10m", "Carga eléctrica reforzada", "Acceso vehicular", "Baños industriales"],
+                 discount=dict(type=DiscountType.VOLUME, value=20, active=True, min_people=100),
+                 schedule=[(0, 6, "09:00", "23:00")]),
+            dict(provider_idx=1, name="Matucana 100 - Sala Experimental", type=SpaceType.SALA,
+                 address="Matucana 100", city="Santiago",
+                 lat=-33.4435, lng=-70.6680, price=22000, capacity=60, rating=4.6, reviews=88,
+                 description="Sala íntima para teatro experimental, performance art y presentaciones alternativas. Flexibilidad total en la disposición del espacio.",
+                 amenities=["Piso flexible", "Riel de iluminación", "Sistema de sonido", "Gradas móviles"],
+                 discount=None, schedule=[(0, 6, "10:00", "22:00")]),
+        ],
+    ),
+
+    dict(
+        provider_idx=2,
+        name="Club de Golf Los Leones",
+        type=SpaceType.SALON,
+        address="Av. Presidente Riesco 3700",
+        city="Santiago",
+        lat=-33.4160, lng=-70.5900,
+        price=90000, capacity=400, rating=4.9, reviews=187,
+        description="Histórico club de golf en Las Condes con instalaciones de primer nivel. Salones clásicos, terraza con vista al campo de golf y servicio de catering exclusivo. El venue de preferencia para eventos corporativos de alto perfil.",
+        amenities=["Vista al campo de golf", "Valet parking", "Catering exclusivo", "WiFi", "Sommelier"],
+        discount=None,
+        schedule=[(0, 6, "08:00", "23:00")],
+        sub_spaces=[
+            dict(provider_idx=2, name="Los Leones - Salón Cordillera", type=SpaceType.SALON,
+                 address="Av. Presidente Riesco 3700", city="Santiago",
+                 lat=-33.4160, lng=-70.5900, price=85000, capacity=300, rating=5.0, reviews=142,
+                 description="El salón principal del club, con vista privilegiada a la cordillera nevada. Capacidad para 300 personas en formato banquete con servicio completo.",
+                 amenities=["Vista cordillera", "Iluminación cristal", "Sonido integrado", "Catering", "Decoración floral"],
+                 discount=None, schedule=[(0, 6, "08:00", "23:00")]),
+            dict(provider_idx=2, name="Los Leones - Sala Directorio", type=SpaceType.SALA,
+                 address="Av. Presidente Riesco 3700", city="Santiago",
+                 lat=-33.4160, lng=-70.5900, price=40000, capacity=24, rating=4.9, reviews=98,
+                 description="Sala de directorio presidencial para reuniones de alta dirección. Pantalla 8K, sistema de videoconferencia enterprise y servicio de butler.",
+                 amenities=["Pantalla 8K", "Videoconferencia enterprise", "Butler", "Catering premium", "Estacionamiento VIP"],
+                 discount=None, schedule=[(0, 5, "07:00", "20:00")]),
+            dict(provider_idx=2, name="Los Leones - Terraza Jardines", type=SpaceType.TERRAZA,
+                 address="Av. Presidente Riesco 3700", city="Santiago",
+                 lat=-33.4160, lng=-70.5900, price=65000, capacity=200, rating=4.9, reviews=76,
+                 description="Terraza con jardines perfectamente mantenidos y vista al campo de golf. Ideal para cócteles de lanzamiento, bodas al aire libre y eventos de primavera.",
+                 amenities=["Jardines cuidados", "Vista golf", "Carpa disponible", "Bar premium", "Calefactores"],
+                 discount=dict(type=DiscountType.PERCENTAGE, value=10, active=True, min_people=None),
+                 schedule=[(4, 6, "12:00", "23:00")]),
+        ],
+    ),
+
+    dict(
+        provider_idx=0,
+        name="Fábrica de Arte - Barrio Yungay",
+        type=SpaceType.ESTUDIO,
+        address="Compañía de Jesús 1250",
+        city="Santiago",
+        lat=-33.4420, lng=-70.6650,
+        price=25000, capacity=80, rating=4.6, reviews=155,
+        description="Antigua fábrica industrial reconvertida en complejo de estudios creativos en el histórico barrio Yungay. Talleres de cerámica, estudio fotográfico y sala de ensayo musical bajo un mismo techo.",
+        amenities=["Estacionamiento", "Cafetería", "WiFi fibra óptica", "Locker"],
+        discount=None,
+        schedule=[(0, 6, "08:00", "22:00")],
+        sub_spaces=[
+            dict(provider_idx=0, name="Fábrica de Arte - Estudio Fotográfico", type=SpaceType.ESTUDIO,
+                 address="Compañía de Jesús 1250", city="Santiago",
+                 lat=-33.4420, lng=-70.6650, price=22000, capacity=10, rating=4.7, reviews=87,
+                 description="Estudio fotográfico con ciclorama negro y blanco, iluminación Profoto y set de accesorios. Ideal para moda, producto y fotografía artística.",
+                 amenities=["Ciclorama negro/blanco", "Luces Profoto", "Camarín", "Set de accesorios", "Frigobar"],
+                 discount=dict(type=DiscountType.PERCENTAGE, value=10, active=True, min_people=None),
+                 schedule=[(0, 6, "08:00", "21:00")]),
+            dict(provider_idx=0, name="Fábrica de Arte - Sala de Ensayo Musical", type=SpaceType.ESTUDIO,
+                 address="Compañía de Jesús 1250", city="Santiago",
+                 lat=-33.4420, lng=-70.6650, price=15000, capacity=8, rating=4.5, reviews=62,
+                 description="Sala de ensayo insonorizada con batería, amplis de guitarra y bajo, micrófono y mezcladora básica. Todo incluido por hora.",
+                 amenities=["Batería", "Amplificadores", "Insonorización", "Micrófono", "Mezcladora"],
+                 discount=None, schedule=[(0, 6, "09:00", "23:00")]),
+            dict(provider_idx=0, name="Fábrica de Arte - Taller de Cerámica", type=SpaceType.ESTUDIO,
+                 address="Compañía de Jesús 1250", city="Santiago",
+                 lat=-33.4420, lng=-70.6650, price=12000, capacity=12, rating=4.6, reviews=43,
+                 description="Taller equipado con tornos, horno y materiales básicos para cerámica artesanal. Disponible para talleres privados, clases grupales y proyectos artísticos.",
+                 amenities=["Tornos", "Horno cerámico", "Arcilla incluida", "Mesas de trabajo", "Mandiles"],
+                 discount=None, schedule=[(0, 6, "09:00", "20:00")]),
+        ],
+    ),
+]
+
+
 async def seed() -> None:
     async with AsyncSessionLocal() as session:
         count = (await session.execute(select(func.count()).select_from(Space))).scalar_one()
@@ -319,14 +505,18 @@ async def seed() -> None:
 
             providers_db.append(provider)
 
-        for sp in SPACES:
+        space_id_map: dict[str, uuid.UUID] = {}
+
+        async def _create_space(sp: dict, parent_id: uuid.UUID | None = None) -> uuid.UUID:
             provider = providers_db[sp["provider_idx"]]
+            sid = uuid.uuid4()
             space = Space(
-                id=uuid.uuid4(), provider_id=provider.id, name=sp["name"], type=sp["type"],
+                id=sid, provider_id=provider.id, name=sp["name"], type=sp["type"],
                 description=sp["description"], address=sp["address"], city=sp["city"],
                 lat=sp["lat"], lng=sp["lng"], price_per_hour=sp["price"], capacity=sp["capacity"],
                 cancellation_policy=CancellationPolicy.FLEXIBLE, cancellation_hours=24,
                 is_active=True, rating=sp["rating"], review_count=sp["reviews"],
+                parent_id=parent_id,
             )
             d = sp.get("discount")
             if d:
@@ -337,24 +527,95 @@ async def seed() -> None:
             session.add(space)
             await session.flush()
 
-            # Horarios: lista de (dow_start, dow_end_inclusive, open, close)
             for (d0, d1, op, cl) in sp["schedule"]:
                 for dow in range(d0, d1 + 1):
-                    session.add(SpaceSchedule(id=uuid.uuid4(), space_id=space.id,
+                    session.add(SpaceSchedule(id=uuid.uuid4(), space_id=sid,
                                               day_of_week=dow, open_time=op, close_time=cl))
 
             for name in sp["amenities"]:
-                session.add(SpaceAmenity(id=uuid.uuid4(), space_id=space.id, name=name))
+                session.add(SpaceAmenity(id=uuid.uuid4(), space_id=sid, name=name))
+
+            return sid
+
+        for sp in SPACES:
+            await _create_space(sp)
+
+        for venue in VENUES_REALES:
+            parent_id = await _create_space(venue)
+            space_id_map[venue["name"]] = parent_id
+            for sub in venue.get("sub_spaces", []):
+                await _create_space(sub, parent_id=parent_id)
 
         await session.commit()
-        types = {}
-        for sp in SPACES:
-            types[sp["type"].value] = types.get(sp["type"].value, 0) + 1
-        print(f"[seed] Creados {len(SPACES)} espacios demo con 3 proveedores.")
-        for t, n in sorted(types.items()):
-            print(f"  {t}: {n}")
+        total = len(SPACES) + len(VENUES_REALES) + sum(len(v.get("sub_spaces", [])) for v in VENUES_REALES)
+        print(f"[seed] Creados {total} espacios demo ({len(VENUES_REALES)} venues reales con sub-espacios).")
         print(f"Credenciales: anfitrion@xpacio.cl / xpacio1234")
 
 
+async def seed_venues() -> None:
+    """Agrega venues reales de Santiago con sub-espacios (idempotente por nombre)."""
+    async with AsyncSessionLocal() as session:
+        # Obtener un proveedor existente para asignar los venues
+        prov_results = await session.execute(select(Provider).limit(3))
+        providers_db = list(prov_results.scalars().all())
+        if not providers_db:
+            print("[seed_venues] No hay proveedores — corre seed() primero.")
+            return
+
+        # Asegurar 3 proveedores (reutilizar o repetir el primero)
+        while len(providers_db) < 3:
+            providers_db.append(providers_db[0])
+
+        inserted = 0
+
+        async def _create_venue_space(sp: dict, parent_id: uuid.UUID | None = None) -> uuid.UUID:
+            existing = await session.execute(select(Space).where(Space.name == sp["name"]))
+            existing_space = existing.scalar_one_or_none()
+            if existing_space:
+                return existing_space.id
+
+            provider = providers_db[sp["provider_idx"]]
+            sid = uuid.uuid4()
+            space = Space(
+                id=sid, provider_id=provider.id, name=sp["name"], type=sp["type"],
+                description=sp["description"], address=sp["address"], city=sp["city"],
+                lat=sp["lat"], lng=sp["lng"], price_per_hour=sp["price"], capacity=sp["capacity"],
+                cancellation_policy=CancellationPolicy.FLEXIBLE, cancellation_hours=24,
+                is_active=True, rating=sp["rating"], review_count=sp["reviews"],
+                parent_id=parent_id,
+            )
+            d = sp.get("discount")
+            if d:
+                space.discount_type = d["type"]
+                space.discount_value = d["value"]
+                space.discount_active = d["active"]
+                space.discount_min_people = d.get("min_people")
+            session.add(space)
+            await session.flush()
+
+            for (d0, d1, op, cl) in sp["schedule"]:
+                for dow in range(d0, d1 + 1):
+                    session.add(SpaceSchedule(id=uuid.uuid4(), space_id=sid,
+                                              day_of_week=dow, open_time=op, close_time=cl))
+            for name in sp["amenities"]:
+                session.add(SpaceAmenity(id=uuid.uuid4(), space_id=sid, name=name))
+
+            nonlocal inserted
+            inserted += 1
+            return sid
+
+        for venue in VENUES_REALES:
+            parent_id = await _create_venue_space(venue)
+            for sub in venue.get("sub_spaces", []):
+                await _create_venue_space(sub, parent_id=parent_id)
+
+        await session.commit()
+        print(f"[seed_venues] {inserted} nuevos espacios insertados.")
+
+
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "venues":
+        asyncio.run(seed_venues())
+    else:
+        asyncio.run(seed())

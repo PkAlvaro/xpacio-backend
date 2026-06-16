@@ -1,7 +1,21 @@
+import re
 import uuid
+from datetime import datetime
 from typing import Annotated
 from pydantic import BaseModel, Field, field_validator, model_validator
 from app.constants import SpaceType, CancellationPolicy, DiscountType
+
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_SQL_RE = re.compile(r"(--|;|/\*|\*/|xp_|UNION\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|DROP\b|EXEC\b)", re.IGNORECASE)
+
+
+def _sanitize(v: str | None, max_len: int = 2000) -> str | None:
+    if v is None:
+        return v
+    v = _CTRL_RE.sub("", v).strip()
+    if _SQL_RE.search(v):
+        raise ValueError("Entrada no válida")
+    return v[:max_len]
 
 
 def compute_discounted_price(
@@ -20,14 +34,6 @@ def compute_discounted_price(
     return None
 
 
-class SpaceImageOut(BaseModel):
-    id: uuid.UUID
-    url: str
-    is_primary: bool
-    display_order: int
-    model_config = {"from_attributes": True}
-
-
 class SpaceScheduleOut(BaseModel):
     id: uuid.UUID
     day_of_week: int
@@ -39,25 +45,51 @@ class SpaceScheduleOut(BaseModel):
 class SpaceCreate(BaseModel):
     name: str = Field(min_length=3, max_length=255)
     type: SpaceType
-    description: str | None = None
-    address: str = Field(min_length=5)
-    city: str = Field(min_length=2)
-    price_per_hour: Annotated[int, Field(gt=0)]
-    capacity: Annotated[int, Field(gt=0)] = 1
+    description: str | None = Field(default=None, max_length=5000)
+    address: str = Field(min_length=5, max_length=500)
+    city: str = Field(min_length=2, max_length=100)
+    price_per_hour: Annotated[int, Field(gt=0, le=10_000_000)]
+    capacity: Annotated[int, Field(gt=0, le=10_000)] = 1
     cancellation_policy: CancellationPolicy = CancellationPolicy.FLEXIBLE
-    cancellation_hours: Annotated[int, Field(ge=0)] = 24
-    amenities: list[str] = []
+    cancellation_hours: Annotated[int, Field(ge=0, le=720)] = 24
+    amenities: list[str] = Field(default=[], max_length=50)
+
+    @field_validator("name", "address", "city")
+    @classmethod
+    def sanitize_text(cls, v: str) -> str:
+        result = _sanitize(v)
+        return result if result else v
+
+    @field_validator("description")
+    @classmethod
+    def sanitize_description(cls, v: str | None) -> str | None:
+        return _sanitize(v, max_len=5000)
+
+    @field_validator("amenities")
+    @classmethod
+    def sanitize_amenities(cls, v: list[str]) -> list[str]:
+        return [(_sanitize(a, max_len=100) or "") for a in v if a.strip()]
 
 
 class SpaceUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=3)
-    description: str | None = None
-    price_per_hour: Annotated[int | None, Field(default=None, gt=0)] = None
-    capacity: Annotated[int | None, Field(default=None, gt=0)] = None
+    name: str | None = Field(default=None, min_length=3, max_length=255)
+    description: str | None = Field(default=None, max_length=5000)
+    price_per_hour: Annotated[int | None, Field(default=None, gt=0, le=10_000_000)] = None
+    capacity: Annotated[int | None, Field(default=None, gt=0, le=10_000)] = None
     cancellation_policy: CancellationPolicy | None = None
-    cancellation_hours: Annotated[int | None, Field(default=None, ge=0)] = None
+    cancellation_hours: Annotated[int | None, Field(default=None, ge=0, le=720)] = None
     is_active: bool | None = None
     amenities: list[str] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str | None) -> str | None:
+        return _sanitize(v, max_len=255) if v else v
+
+    @field_validator("description")
+    @classmethod
+    def sanitize_description(cls, v: str | None) -> str | None:
+        return _sanitize(v, max_len=5000)
 
     # SC-001 — Descuentos / Ofertas
     discount_type: DiscountType | None = None
@@ -72,8 +104,17 @@ class SpaceUpdate(BaseModel):
         return self
 
 
+class SpaceImageOut(BaseModel):
+    id: uuid.UUID
+    url: str
+    is_primary: bool
+    display_order: int
+    model_config = {"from_attributes": True}
+
+
 class SpaceResponse(BaseModel):
     id: uuid.UUID
+    slug: str | None = None
     provider_id: uuid.UUID
     name: str
     type: SpaceType
@@ -120,8 +161,43 @@ class SpaceResponse(BaseModel):
         return cls.model_validate(space)
 
 
+class SubSpaceItem(BaseModel):
+    id: uuid.UUID
+    slug: str | None = None
+    name: str
+    type: SpaceType
+    description: str | None = None
+    price_per_hour: int
+    capacity: int
+    rating: float
+    is_active: bool
+    primary_image: str | None = None
+    amenities: list[str] = []
+    discount_active: bool = False
+    discount_type: DiscountType | None = None
+    discount_value: float | None = None
+    discounted_price: int | None = None
+    model_config = {"from_attributes": True}
+
+    @field_validator("amenities", mode="before")
+    @classmethod
+    def coerce_amenities(cls, v):
+        if v and hasattr(v[0], "name"):
+            return [a.name for a in v]
+        return v
+
+    @model_validator(mode="after")
+    def fill_discounted_price(self) -> "SubSpaceItem":
+        if self.discounted_price is None:
+            self.discounted_price = compute_discounted_price(
+                self.price_per_hour, self.discount_active, self.discount_type, self.discount_value
+            )
+        return self
+
+
 class SpaceListItem(BaseModel):
     id: uuid.UUID
+    slug: str | None = None
     name: str
     type: SpaceType
     city: str
@@ -150,6 +226,7 @@ class SpaceFilters(BaseModel):
     radius_km: float = Field(default=10.0, gt=0)
     type: SpaceType | None = None
     city: str | None = None
+    name: str | None = None
     min_price: int | None = None
     max_price: int | None = None
     on_offer: bool = False  # SC-001 — filtrar solo espacios con descuento activo
@@ -174,3 +251,57 @@ class ScheduleCreate(BaseModel):
         if not (0 <= int(h) <= 23 and 0 <= int(m) <= 59):
             raise ValueError("Hora fuera de rango")
         return v
+
+
+# --- Admin schemas ---
+
+class AdminSpaceCreate(BaseModel):
+    name: str = Field(min_length=3, max_length=255)
+    type: SpaceType
+    description: str | None = None
+    address: str = Field(min_length=5)
+    city: str = Field(min_length=2)
+    price_per_hour: Annotated[int, Field(gt=0)]
+    capacity: Annotated[int, Field(gt=0)] = 1
+    cancellation_policy: CancellationPolicy = CancellationPolicy.FLEXIBLE
+    cancellation_hours: Annotated[int, Field(ge=0)] = 24
+    amenities: list[str] = []
+    parent_id: uuid.UUID | None = None
+
+
+class AdminSpaceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=3)
+    slug: str | None = None
+    type: SpaceType | None = None
+    description: str | None = None
+    address: str | None = None
+    city: str | None = None
+    price_per_hour: Annotated[int | None, Field(default=None, gt=0)] = None
+    capacity: Annotated[int | None, Field(default=None, gt=0)] = None
+    cancellation_policy: CancellationPolicy | None = None
+    cancellation_hours: Annotated[int | None, Field(default=None, ge=0)] = None
+    is_active: bool | None = None
+    amenities: list[str] | None = None
+    discount_type: DiscountType | None = None
+    discount_value: Annotated[float | None, Field(default=None, gt=0, le=100)] = None
+    discount_active: bool | None = None
+    discount_min_people: Annotated[int | None, Field(default=None, ge=1)] = None
+
+
+class AdminSpaceListItem(BaseModel):
+    id: uuid.UUID
+    slug: str | None = None
+    name: str
+    type: SpaceType
+    city: str
+    address: str
+    price_per_hour: int
+    capacity: int
+    is_active: bool
+    rating: float
+    review_count: int
+    parent_id: uuid.UUID | None = None
+    primary_image: str | None = None
+    provider_name: str | None = None
+    created_at: datetime
+    model_config = {"from_attributes": True}

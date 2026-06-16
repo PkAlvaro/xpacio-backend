@@ -8,7 +8,7 @@ from app.dependencies import get_redis, get_current_user, require_role
 from app.constants import UserRole
 from app.schemas.space import (
     SpaceCreate, SpaceUpdate, SpaceResponse, SpaceListItem,
-    SpaceFilters, ScheduleCreate, SpaceScheduleOut,
+    SpaceFilters, ScheduleCreate, SpaceScheduleOut, SubSpaceItem,
 )
 from app.services import space_service
 
@@ -40,6 +40,7 @@ async def list_spaces(
     city: str | None = Query(default=None, description="Ciudad (ej. Santiago)"),
     min_price: int | None = Query(default=None, description="Precio mínimo por hora (CLP)"),
     max_price: int | None = Query(default=None, description="Precio máximo por hora (CLP)"),
+    q: str | None = Query(default=None, description="Filtrar por nombre (ILIKE)"),
     on_offer: bool = Query(default=False, description="Solo espacios en oferta (descuento activo)"),
     page: int = Query(default=1, ge=1, description="Número de página"),
     page_size: int = Query(default=20, ge=1, le=50, description="Resultados por página (máx 50)"),
@@ -49,7 +50,7 @@ async def list_spaces(
     filters = SpaceFilters(
         lat=lat, lng=lng, radius_km=radius_km,
         type=SpaceType(type) if type else None,
-        city=city, min_price=min_price, max_price=max_price,
+        city=city, name=q, min_price=min_price, max_price=max_price,
         on_offer=on_offer,
         page=page, page_size=page_size,
     )
@@ -100,6 +101,20 @@ async def create_space(
 
 
 @router.get(
+    "/suggest",
+    response_model=dict,
+    summary="Sugerencias fuzzy por nombre",
+)
+async def suggest_spaces(
+    q: str = Query(default="", min_length=1, description="Texto a buscar en el nombre del espacio"),
+    limit: int = Query(default=8, ge=1, le=20),
+    session: AsyncSession = Depends(get_session),
+):
+    items = await space_service.suggest_spaces(q, session, limit)
+    return {"success": True, "data": items}
+
+
+@router.get(
     "/mine",
     response_model=dict,
     summary="Mis espacios",
@@ -118,17 +133,17 @@ async def my_spaces(
 
 
 @router.get(
-    "/{space_id}",
+    "/{space_id_or_slug}",
     response_model=dict,
     summary="Ver detalle de un espacio",
     description="""
-Retorna el detalle completo de un espacio: información, amenities, imágenes y horarios configurados.
+Retorna el detalle completo de un espacio. Acepta UUID o slug (ej. `gam-centro-gabriela-mistral-santiago`).
 
 **No requiere autenticación.**
 """,
 )
-async def get_space(space_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
-    space = await space_service.get_space(space_id, session)
+async def get_space(space_id_or_slug: str, session: AsyncSession = Depends(get_session)):
+    space = await space_service.resolve_space(space_id_or_slug, session)
     return {"success": True, "data": SpaceResponse.from_orm_with_amenities(space).model_dump()}
 
 
@@ -238,6 +253,24 @@ async def set_schedules(
 ):
     result = await space_service.set_schedules(space_id, schedules, user.id, session)
     return {"success": True, "data": [SpaceScheduleOut.model_validate(s).model_dump() for s in result]}
+
+
+@router.get(
+    "/{space_id}/sub-spaces",
+    response_model=dict,
+    summary="Sub-espacios / salas de un espacio",
+    description="""
+Retorna las salas o sub-espacios disponibles dentro de un espacio padre (venue).
+
+Ejemplo: un centro cultural puede tener Sala A, Sala B y Terraza como sub-espacios
+que se pueden reservar independientemente.
+
+**No requiere autenticación.**
+""",
+)
+async def get_sub_spaces(space_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    items = await space_service.list_sub_spaces(space_id, session)
+    return {"success": True, "data": [SubSpaceItem.model_validate(s).model_dump() for s in items]}
 
 
 @router.get(

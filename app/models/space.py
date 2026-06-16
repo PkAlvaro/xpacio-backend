@@ -12,7 +12,9 @@ class Space(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     provider_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("providers.id"), nullable=False, index=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str | None] = mapped_column(String(300), nullable=True, unique=True, index=True)
     type: Mapped[SpaceType] = mapped_column(SAEnum(SpaceType, name="space_type", values_callable=lambda x: [e.value for e in x]), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -47,6 +49,8 @@ class Space(Base, TimestampMixin):
     amenities = relationship("SpaceAmenity", back_populates="space", cascade="all, delete-orphan")
     reservations = relationship("Reservation", back_populates="space")
     reviews = relationship("Review", back_populates="space")
+    sub_spaces = relationship("Space", back_populates="parent", cascade="all, delete-orphan", foreign_keys="Space.parent_id")
+    parent = relationship("Space", back_populates="sub_spaces", remote_side="Space.id", foreign_keys="Space.parent_id")
 
 
 class SpaceSchedule(Base):

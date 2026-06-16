@@ -1,130 +1,123 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response, Cookie
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
 from app.database import get_session
 from app.dependencies import get_redis, get_current_user
-from app.schemas.auth import RegisterRequest, LoginRequest, RefreshRequest, TokenResponse, UserResponse, UpdateProfileRequest
+from app.schemas.auth import RegisterRequest, LoginRequest, UserResponse, UpdateProfileRequest
 from app.services import auth_service
 from app.config import get_settings
+from app.limiter import limiter
 
 settings = get_settings()
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+COOKIE_NAME = "xpacio_refresh"
+COOKIE_PATH = "/api/v1/auth"
 
-@router.post(
-    "/register",
-    response_model=dict,
-    status_code=201,
-    summary="Registrar nuevo usuario",
-    description="""
-Crea una cuenta nueva. Todos los usuarios se registran con rol `client`.
 
-Para obtener rol `provider` o `admin`, un administrador debe usar
-`PATCH /admin/users/{id}/role` después del registro.
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="strict",
+        max_age=settings.REFRESH_TOKEN_TTL_DAYS * 86400,
+        path=COOKIE_PATH,
+    )
 
-Retorna el perfil del usuario y un par de tokens (access + refresh).
-""",
-)
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(key=COOKIE_NAME, path=COOKIE_PATH)
+
+
+@router.post("/register", response_model=dict, status_code=201)
+@limiter.limit("5/minute")
 async def register(
+    request: Request,
+    response: Response,
     data: RegisterRequest,
     session: AsyncSession = Depends(get_session),
 ):
     user, tokens = await auth_service.register_user(data, session)
-    return {"success": True, "data": {"user": UserResponse.model_validate(user), "tokens": tokens}}
+    _set_refresh_cookie(response, tokens.refresh_token)
+    return {
+        "success": True,
+        "data": {
+            "user": UserResponse.model_validate(user),
+            "tokens": {
+                "access_token": tokens.access_token,
+                "token_type": tokens.token_type,
+                "expires_in": tokens.expires_in,
+            },
+        },
+    }
 
 
-@router.post(
-    "/login",
-    response_model=dict,
-    summary="Iniciar sesión",
-    description="""
-Autentica al usuario con email y contraseña.
-
-Retorna:
-- `access_token`: token JWT válido por 15 minutos. Incluir en el header
-  `Authorization: Bearer <token>` en cada petición protegida.
-- `refresh_token`: token válido por 7 días. Usar en `POST /auth/refresh`
-  para obtener un nuevo `access_token` sin volver a ingresar contraseña.
-""",
-)
+@router.post("/login", response_model=dict)
+@limiter.limit("10/minute")
 async def login(
+    request: Request,
+    response: Response,
     data: LoginRequest,
     session: AsyncSession = Depends(get_session),
     redis: aioredis.Redis = Depends(get_redis),
 ):
     tokens = await auth_service.login_user(data, session, redis)
-    return {"success": True, "data": tokens}
+    _set_refresh_cookie(response, tokens.refresh_token)
+    return {
+        "success": True,
+        "data": {
+            "access_token": tokens.access_token,
+            "token_type": tokens.token_type,
+            "expires_in": tokens.expires_in,
+        },
+    }
 
 
-@router.post(
-    "/refresh",
-    response_model=dict,
-    summary="Renovar access token",
-    description="""
-Genera un nuevo par de tokens usando el `refresh_token` vigente.
-
-El `refresh_token` anterior queda invalidado inmediatamente (rotación de tokens).
-Usar cuando el `access_token` haya expirado (respuesta 401) para no pedir
-contraseña al usuario nuevamente.
-""",
-)
+@router.post("/refresh", response_model=dict)
+@limiter.limit("20/minute")
 async def refresh(
-    data: RefreshRequest,
+    request: Request,
+    response: Response,
     redis: aioredis.Redis = Depends(get_redis),
+    refresh_cookie: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ):
-    tokens = await auth_service.refresh_tokens(data.refresh_token, redis)
-    return {"success": True, "data": tokens}
+    if not refresh_cookie:
+        from app.exceptions import DomainException
+        raise DomainException("Sesión expirada", status_code=401)
+    tokens = await auth_service.refresh_tokens(refresh_cookie, redis)
+    _set_refresh_cookie(response, tokens.refresh_token)
+    return {
+        "success": True,
+        "data": {
+            "access_token": tokens.access_token,
+            "token_type": tokens.token_type,
+            "expires_in": tokens.expires_in,
+        },
+    }
 
 
-@router.post(
-    "/logout",
-    status_code=204,
-    summary="Cerrar sesión",
-    description="""
-Invalida el `access_token` actual añadiéndolo a una blacklist en Redis.
-El token queda inutilizable hasta su expiración natural (15 min).
-
-**Requiere autenticación.**
-""",
-)
+@router.post("/logout", status_code=204)
 async def logout(
     request: Request,
+    response: Response,
     redis: aioredis.Redis = Depends(get_redis),
     _=Depends(get_current_user),
 ):
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
     await auth_service.logout_user(token, redis)
+    _clear_refresh_cookie(response)
 
 
-@router.get(
-    "/me",
-    response_model=dict,
-    summary="Ver mi perfil",
-    description="""
-Retorna el perfil del usuario actualmente autenticado: id, nombre, email, rol y teléfono.
-
-Útil para verificar que el token es válido y para conocer el rol del usuario.
-
-**Requiere autenticación.**
-""",
-)
+@router.get("/me", response_model=dict)
 async def me(user=Depends(get_current_user)):
     return {"success": True, "data": UserResponse.model_validate(user)}
 
 
-@router.patch(
-    "/me",
-    response_model=dict,
-    summary="Actualizar mi perfil",
-    description="""
-Actualiza el perfil del usuario autenticado. Solo se modifican los campos enviados.
-
-Para cambiar la contraseña, enviar `current_password` y `new_password`.
-
-**Requiere autenticación.**
-""",
-)
+@router.patch("/me", response_model=dict)
 async def update_me(
     data: UpdateProfileRequest,
     session: AsyncSession = Depends(get_session),

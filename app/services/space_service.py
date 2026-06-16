@@ -1,8 +1,11 @@
 import uuid
 import math
+import re
+import secrets
+import unicodedata
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_, text
 from sqlalchemy.orm import selectinload
 import redis.asyncio as aioredis
 
@@ -15,6 +18,27 @@ from app.services.geocoding_service import geocode
 from app.services.redis_service import RedisService
 
 logger = structlog.get_logger()
+
+
+def _slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    return text.strip("-")
+
+
+async def _unique_slug(name: str, city: str, session: AsyncSession, exclude_id: uuid.UUID | None = None) -> str:
+    base = _slugify(f"{name}-{city}")[:80]
+    slug = base
+    for _ in range(10):
+        q = select(Space.id).where(Space.slug == slug)
+        if exclude_id:
+            q = q.where(Space.id != exclude_id)
+        if not await session.scalar(q):
+            return slug
+        slug = f"{base}-{secrets.token_hex(2)}"
+    return f"{base}-{secrets.token_hex(4)}"
 
 
 def calculate_price(space: Space, hours: int, num_people: int = 1) -> dict:
@@ -66,11 +90,13 @@ async def create_space(
 ) -> Space:
     redis_svc = RedisService(redis)
     coords = await geocode(f"{data.address}, {data.city}, Chile", redis_svc)
+    slug = await _unique_slug(data.name, data.city, session)
 
     space = Space(
         id=uuid.uuid4(),
         provider_id=provider_id,
         name=data.name,
+        slug=slug,
         type=data.type,
         description=data.description,
         address=data.address,
@@ -99,8 +125,27 @@ async def get_space(space_id: uuid.UUID, session: AsyncSession) -> Space:
     return await _load_space(session, space_id)
 
 
+async def get_space_by_slug(slug: str, session: AsyncSession) -> Space:
+    result = await session.execute(
+        select(Space)
+        .options(selectinload(Space.images), selectinload(Space.schedules), selectinload(Space.amenities))
+        .where(Space.slug == slug)
+    )
+    space = result.scalar_one_or_none()
+    if not space:
+        raise NotFoundError("Espacio")
+    return space
+
+
+async def resolve_space(id_or_slug: str, session: AsyncSession) -> Space:
+    try:
+        return await get_space(uuid.UUID(id_or_slug), session)
+    except ValueError:
+        return await get_space_by_slug(id_or_slug, session)
+
+
 async def list_spaces(filters: SpaceFilters, session: AsyncSession) -> tuple[list[SpaceListItem], int]:
-    query = select(Space).where(Space.is_active == True)
+    query = select(Space).where(Space.is_active == True, Space.parent_id == None)
 
     if filters.type:
         query = query.where(Space.type == filters.type)
@@ -110,6 +155,8 @@ async def list_spaces(filters: SpaceFilters, session: AsyncSession) -> tuple[lis
         query = query.where(Space.price_per_hour >= filters.min_price)
     if filters.max_price:
         query = query.where(Space.price_per_hour <= filters.max_price)
+    if filters.name:
+        query = query.where(func.lower(Space.name).contains(filters.name.lower()))
     if filters.on_offer:
         query = query.where(Space.discount_active == True)
 
@@ -224,6 +271,62 @@ async def get_similar_spaces(space_id: uuid.UUID, session: AsyncSession, limit: 
     return [_to_list_item(s) for s in spaces]
 
 
+async def suggest_spaces(q: str, session: AsyncSession, limit: int = 8) -> list[dict]:
+    """Fuzzy name search usando pg_trgm similarity + ILIKE fallback.
+
+    Retorna id, name, type, city, address, primary_image, rating ordenados por score desc.
+    Umbral bajo (0.05) para capturar coincidencias parciales de nombres cortos.
+    """
+    q = q.strip()
+    if not q:
+        return []
+
+    sim_expr = func.similarity(Space.name, q)
+    result = await session.execute(
+        select(Space, sim_expr.label("score"))
+        .options(selectinload(Space.images))
+        .where(
+            Space.is_active == True,
+            Space.parent_id == None,
+            or_(
+                sim_expr > 0.05,
+                func.lower(Space.name).contains(q.lower()),
+            ),
+        )
+        .order_by(sim_expr.desc(), Space.rating.desc())
+        .limit(limit)
+    )
+    rows = result.all()
+
+    suggestions = []
+    for space, _score in rows:
+        primary = next((img.url for img in space.images if img.is_primary), None)
+        if not primary and space.images:
+            primary = space.images[0].url
+        suggestions.append({
+            "id": str(space.id),
+            "slug": space.slug,
+            "name": space.name,
+            "type": space.type.value,
+            "city": space.city,
+            "address": space.address,
+            "primary_image": primary,
+            "rating": float(space.rating),
+            "price_per_hour": space.price_per_hour,
+        })
+    return suggestions
+
+
+async def list_sub_spaces(space_id: uuid.UUID, session: AsyncSession) -> list[Space]:
+    result = await session.execute(
+        select(Space)
+        .options(selectinload(Space.images), selectinload(Space.amenities))
+        .where(Space.parent_id == space_id, Space.is_active == True)
+        .order_by(Space.price_per_hour.asc())
+    )
+    return list(result.scalars().all())
+
+
 async def update_space(
     space_id: uuid.UUID,
     data: SpaceUpdate,
@@ -262,9 +365,11 @@ async def set_schedules(
     schedules: list[ScheduleCreate],
     user_id: uuid.UUID,
     session: AsyncSession,
+    skip_owner_check: bool = False,
 ) -> list[SpaceSchedule]:
     space = await _load_space(session, space_id)
-    await _assert_owner(space, user_id, session)
+    if not skip_owner_check:
+        await _assert_owner(space, user_id, session)
 
     for s in space.schedules:
         await session.delete(s)
@@ -316,3 +421,224 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     return R * 2 * math.asin(math.sqrt(a))
+
+
+# --- Admin functions ---
+
+async def admin_list_spaces(
+    session: AsyncSession,
+    q: str | None = None,
+    active_only: bool | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list, int]:
+    from app.schemas.space import AdminSpaceListItem
+    from app.models.user import User
+
+    query = select(Space).where(Space.parent_id == None)
+    if q:
+        query = query.where(func.lower(Space.name).contains(q.lower()))
+    if active_only is not None:
+        query = query.where(Space.is_active == active_only)
+
+    count_q = select(func.count()).select_from(query.subquery())
+    total = (await session.execute(count_q)).scalar_one()
+
+    query = (
+        query
+        .options(selectinload(Space.images))
+        .order_by(Space.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    spaces = list((await session.execute(query)).scalars().all())
+
+    provider_ids = [s.provider_id for s in spaces]
+    providers = {}
+    if provider_ids:
+        prov_res = await session.execute(
+            select(Provider, User).join(User, Provider.user_id == User.id)
+            .where(Provider.id.in_(provider_ids))
+        )
+        for prov, user in prov_res.all():
+            providers[prov.id] = user.name
+
+    items = []
+    for s in spaces:
+        primary = next((img.url for img in s.images if img.is_primary), None) or (s.images[0].url if s.images else None)
+        items.append(AdminSpaceListItem(
+            id=s.id,
+            slug=s.slug,
+            name=s.name,
+            type=s.type,
+            city=s.city,
+            address=s.address,
+            price_per_hour=s.price_per_hour,
+            capacity=s.capacity,
+            is_active=s.is_active,
+            rating=float(s.rating),
+            review_count=s.review_count,
+            parent_id=s.parent_id,
+            primary_image=primary,
+            provider_name=providers.get(s.provider_id),
+            created_at=s.created_at,
+        ))
+    return items, total
+
+
+async def admin_create_space(
+    data,
+    provider_id: uuid.UUID,
+    session: AsyncSession,
+    redis: aioredis.Redis,
+) -> Space:
+    redis_svc = RedisService(redis)
+    coords = await geocode(f"{data.address}, {data.city}, Chile", redis_svc)
+    slug = await _unique_slug(data.name, data.city, session)
+
+    space = Space(
+        id=uuid.uuid4(),
+        provider_id=provider_id,
+        name=data.name,
+        slug=slug,
+        type=data.type,
+        description=data.description,
+        address=data.address,
+        city=data.city,
+        lat=coords[0] if coords else None,
+        lng=coords[1] if coords else None,
+        price_per_hour=data.price_per_hour,
+        capacity=data.capacity,
+        cancellation_policy=data.cancellation_policy,
+        cancellation_hours=data.cancellation_hours,
+        parent_id=getattr(data, "parent_id", None),
+    )
+    session.add(space)
+    for name in data.amenities:
+        session.add(SpaceAmenity(id=uuid.uuid4(), space_id=space.id, name=name))
+    for day in range(7):
+        session.add(SpaceSchedule(id=uuid.uuid4(), space_id=space.id, day_of_week=day, open_time="08:00", close_time="22:00"))
+    await session.commit()
+    return await _load_space(session, space.id)
+
+
+async def admin_update_space(space_id: uuid.UUID, data, session: AsyncSession, redis: aioredis.Redis | None = None) -> Space:
+    space = await _load_space(session, space_id)
+    update_data = data.model_dump(exclude_unset=True, exclude={"amenities"})
+
+    if "address" in update_data or "city" in update_data:
+        addr = update_data.get("address", space.address)
+        city = update_data.get("city", space.city)
+        if redis:
+            redis_svc = RedisService(redis)
+            coords = await geocode(f"{addr}, {city}, Chile", redis_svc)
+            if coords:
+                update_data["lat"] = coords[0]
+                update_data["lng"] = coords[1]
+
+    if "name" in update_data or "city" in update_data:
+        new_name = update_data.get("name", space.name)
+        new_city = update_data.get("city", space.city)
+        if not update_data.get("slug"):
+            update_data["slug"] = await _unique_slug(new_name, new_city, session, exclude_id=space_id)
+
+    for field, value in update_data.items():
+        setattr(space, field, value)
+
+    if data.amenities is not None:
+        for amenity in space.amenities:
+            await session.delete(amenity)
+        for name in data.amenities:
+            session.add(SpaceAmenity(id=uuid.uuid4(), space_id=space.id, name=name))
+
+    await session.commit()
+    return await _load_space(session, space.id)
+
+
+async def admin_hard_delete_space(space_id: uuid.UUID, session: AsyncSession) -> None:
+    space = await _load_space(session, space_id)
+    await session.delete(space)
+    await session.commit()
+
+
+async def upload_space_image(
+    space_id: uuid.UUID,
+    file,
+    session: AsyncSession,
+    set_primary: bool = False,
+) -> SpaceImage:
+    from app.services.storage_service import upload_file
+    url = await upload_file(file, folder=f"spaces/{space_id}")
+
+    existing = (await session.execute(select(SpaceImage).where(SpaceImage.space_id == space_id))).scalars().all()
+    is_primary = set_primary or len(existing) == 0
+    if is_primary:
+        for img in existing:
+            img.is_primary = False
+
+    img = SpaceImage(
+        id=uuid.uuid4(),
+        space_id=space_id,
+        url=url,
+        is_primary=is_primary,
+        display_order=len(existing),
+    )
+    session.add(img)
+    await session.commit()
+    await session.refresh(img)
+    return img
+
+
+async def delete_space_image(space_id: uuid.UUID, image_id: uuid.UUID, session: AsyncSession) -> None:
+    from app.services.storage_service import delete_file
+    from app.exceptions import NotFoundError
+
+    result = await session.execute(
+        select(SpaceImage).where(SpaceImage.id == image_id, SpaceImage.space_id == space_id)
+    )
+    img = result.scalar_one_or_none()
+    if not img:
+        raise NotFoundError("Imagen")
+
+    if img.url.startswith("/storage/"):
+        key = img.url.removeprefix("/storage/")
+        delete_file(key)
+
+    was_primary = img.is_primary
+    await session.delete(img)
+    await session.flush()
+
+    if was_primary:
+        remaining = (await session.execute(
+            select(SpaceImage).where(SpaceImage.space_id == space_id).order_by(SpaceImage.display_order)
+        )).scalars().first()
+        if remaining:
+            remaining.is_primary = True
+
+    await session.commit()
+
+
+async def set_primary_image(space_id: uuid.UUID, image_id: uuid.UUID, session: AsyncSession) -> None:
+    imgs = (await session.execute(
+        select(SpaceImage).where(SpaceImage.space_id == space_id)
+    )).scalars().all()
+    for img in imgs:
+        img.is_primary = (img.id == image_id)
+    await session.commit()
+
+
+async def admin_stats(session: AsyncSession) -> dict:
+    from app.models.reservation import Reservation
+    from app.models.user import User
+
+    total_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.parent_id == None))).scalar_one()
+    active_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.is_active == True, Space.parent_id == None))).scalar_one()
+    total_users = (await session.execute(select(func.count()).select_from(User))).scalar_one()
+    total_reservations = (await session.execute(select(func.count()).select_from(Reservation))).scalar_one()
+
+    return {
+        "total_spaces": total_spaces,
+        "active_spaces": active_spaces,
+        "total_users": total_users,
+        "total_reservations": total_reservations,
+    }
