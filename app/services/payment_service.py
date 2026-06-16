@@ -10,6 +10,7 @@ from app.models.reservation import Reservation
 from app.constants import PaymentStatus, PaymentProvider, ReservationStatus
 from app.exceptions import NotFoundError, DomainException, ForbiddenError
 from app.services.reservation_service import confirm_reservation
+from app.services import email_service
 from sqlalchemy.exc import IntegrityError
 from app.config import get_settings
 from app.utils.time_utils import now_chile
@@ -238,7 +239,51 @@ async def confirm_transbank(token_ws: str, session: AsyncSession) -> Payment:
         logger.warning("transbank_payment_failed", token=token_ws[:8], response_code=response.get("response_code"))
 
     await session.commit()
+
+    if payment.status == PaymentStatus.PAID:
+        await _send_confirmation_email(payment.reservation_id, session)
+
     return payment
+
+
+async def _send_confirmation_email(reservation_id: uuid.UUID, session: AsyncSession) -> None:
+    from app.models.space import Space
+    from app.models.user import User
+
+    try:
+        res_result = await session.execute(select(Reservation).where(Reservation.id == reservation_id))
+        reservation = res_result.scalar_one_or_none()
+        if not reservation:
+            return
+
+        space_result = await session.execute(select(Space).where(Space.id == reservation.space_id))
+        space = space_result.scalar_one_or_none()
+
+        user_result = await session.execute(select(User).where(User.id == reservation.client_id))
+        user = user_result.scalar_one_or_none()
+
+        if not space or not user:
+            return
+
+        from app.services.calendar_service import get_event_link
+        calendar_url = None
+        if reservation.google_event_id:
+            calendar_url = await get_event_link(reservation.google_event_id)
+
+        await email_service.send_reservation_confirmation(
+            client_email=user.email,
+            client_name=user.name,
+            space_name=space.name,
+            address=f"{space.address}, {space.city}",
+            date=str(reservation.date),
+            start_time=str(reservation.start_time)[:5],
+            end_time=str(reservation.end_time)[:5],
+            total=reservation.total,
+            reservation_id=str(reservation.id),
+            calendar_url=calendar_url,
+        )
+    except Exception as e:
+        logger.error("send_confirmation_email_failed", reservation_id=str(reservation_id), error=str(e))
 
 
 # --- Shared helpers ---

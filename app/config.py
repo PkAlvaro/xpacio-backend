@@ -31,11 +31,8 @@ class Settings(BaseSettings):
     MINIO_BUCKET: str = "xpacio-spaces"
     MINIO_USE_SSL: bool = False
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    FROM_EMAIL: str = "noreply@xpacio.cl"
+    RESEND_API_KEY: str = ""
+    FROM_EMAIL: str = "reservas@xpacio.cl"
 
     GOOGLE_MAPS_API_KEY: str = "placeholder_google_maps_key"
 
