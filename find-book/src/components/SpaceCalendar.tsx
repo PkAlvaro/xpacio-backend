@@ -75,6 +75,10 @@ export function SpaceCalendar({ spaceId, schedules, onDateSelect, selectedDate, 
         .fc-day-today { background: hsl(var(--primary) / 0.04) !important; }
         .fc-event { border-radius: 6px !important; font-size: 11px !important; padding: 1px 4px !important; }
         .fc-daygrid-day-number { font-size: 13px !important; }
+        /* Fix: icon font no disponible — override con Unicode */
+        .fc .fc-icon { font-family: inherit !important; font-style: normal !important; font-size: 14px !important; }
+        .fc .fc-icon-chevron-left::before { content: "‹" !important; }
+        .fc .fc-icon-chevron-right::before { content: "›" !important; }
       `}</style>
       <FullCalendar
         ref={calRef}

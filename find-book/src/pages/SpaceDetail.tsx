@@ -134,47 +134,50 @@ const SpaceDetail = () => {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[1fr_360px] gap-8">
-        <div className="space-y-10 min-w-0">
-          <section>
-            <div className="flex items-center gap-6 pb-6 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5" /> <span>Hasta {space.capacity} personas</span>
-              </div>
-              <div className="px-3 py-1 rounded-full bg-secondary text-sm">{space.type}</div>
+      <div className="space-y-10">
+        {/* Info + comodidades */}
+        <section>
+          <div className="flex items-center gap-6 pb-6 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5" /> <span>Hasta {space.capacity} personas</span>
             </div>
-            <h2 className="font-display text-2xl font-semibold mt-6 mb-3">Sobre este espacio</h2>
-            <p className="text-muted-foreground leading-relaxed">{space.description ?? "Sin descripción."}</p>
-          </section>
+            <div className="px-3 py-1 rounded-full bg-secondary text-sm">{space.type}</div>
+          </div>
+          <h2 className="font-display text-2xl font-semibold mt-6 mb-3">Sobre este espacio</h2>
+          <p className="text-muted-foreground leading-relaxed">{space.description ?? "Sin descripción."}</p>
+        </section>
 
-          {space.amenities.length > 0 && (
-            <section>
-              <h2 className="font-display text-2xl font-semibold mb-4">Servicios incluidos</h2>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {space.amenities.map((a) => (
-                  <div key={a} className="flex items-center gap-3 p-3 rounded-xl bg-secondary">
-                    <Check className="w-4 h-4 text-success" /> <span className="text-sm">{a}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {subSpaces && subSpaces.length > 0 && (
-            <section>
-              <h2 className="font-display text-2xl font-semibold mb-4 flex items-center gap-2">
-                <DoorOpen className="w-6 h-6" /> Salas y sub-espacios disponibles
-              </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {subSpaces.map((sub) => (
-                  <SubSpaceCard key={sub.id} sub={sub} />
-                ))}
-              </div>
-            </section>
-          )}
-
+        {space.amenities.length > 0 && (
           <section>
-            <h2 className="font-display text-2xl font-semibold mb-4">Disponibilidad</h2>
+            <h2 className="font-display text-2xl font-semibold mb-4">Servicios incluidos</h2>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {space.amenities.map((a) => (
+                <div key={a} className="flex items-center gap-3 p-3 rounded-xl bg-secondary">
+                  <Check className="w-4 h-4 text-success" /> <span className="text-sm">{a}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {subSpaces && subSpaces.length > 0 && (
+          <section>
+            <h2 className="font-display text-2xl font-semibold mb-4 flex items-center gap-2">
+              <DoorOpen className="w-6 h-6" /> Salas y sub-espacios disponibles
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {subSpaces.map((sub) => (
+                <SubSpaceCard key={sub.id} sub={sub} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Disponibilidad + Reserva (fusionado) ─────────────────────────── */}
+        <section>
+          <h2 className="font-display text-2xl font-semibold mb-4">Disponibilidad y reserva</h2>
+          <div className="grid lg:grid-cols-[1fr_340px] gap-6 items-start">
+            {/* Calendario */}
             <SpaceCalendar
               spaceId={space.id}
               schedules={space.schedules}
@@ -187,147 +190,140 @@ const SpaceDetail = () => {
                 if (validEnds.length > 0) setEnd(validEnds[0]);
               }}
             />
-          </section>
 
-          <section>
-            <h2 className="font-display text-2xl font-semibold mb-4">Ubicación</h2>
-            {space.lat && space.lng ? (
-              <div className="rounded-2xl overflow-hidden border border-border" style={{ height: "340px" }}>
-                <SpaceMap
-                  lat={space.lat}
-                  lng={space.lng}
-                  name={space.name}
-                  address={space.address}
-                  height="340px"
+            {/* Formulario sticky */}
+            <div className="lg:sticky lg:top-24 bg-card border border-border rounded-2xl p-6 shadow-card">
+              <div className="flex items-baseline gap-2 mb-5">
+                {space.discount_active && space.discounted_price != null && !isVolume ? (
+                  <>
+                    <span className="text-lg line-through text-muted-foreground">{formatCLP(space.price_per_hour)}</span>
+                    <span className="text-2xl font-bold text-primary">{formatCLP(space.discounted_price)}</span>
+                  </>
+                ) : (
+                  <span className="text-2xl font-bold">{formatCLP(space.price_per_hour)}</span>
+                )}
+                <span className="text-muted-foreground">/ hora</span>
+              </div>
+
+              <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                <CalIcon className="w-3 h-3" /> Fecha seleccionada
+              </label>
+              <div className="w-full px-3 py-2.5 rounded-xl border border-border bg-background mb-3 text-sm">
+                {date
+                  ? new Date(date + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })
+                  : "Haz clic en el calendario"}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Inicio</label>
+                  <select value={start} onChange={(e) => {
+                    const newStart = e.target.value;
+                    setStart(newStart);
+                    const validEnds = generateSlots().filter(t => t > newStart);
+                    if (validEnds.length > 0 && end <= newStart) setEnd(validEnds[0]);
+                  }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border bg-background">
+                    {generateSlots().map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Fin</label>
+                  <select value={end} onChange={(e) => setEnd(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border bg-background">
+                    {generateSlots().filter(t => t > start).map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <label className="block text-xs font-semibold mb-1">Número de personas</label>
+                <input
+                  type="number" min={1} max={space.capacity} value={numPeopleStr}
+                  onChange={(e) => setNumPeopleStr(e.target.value)}
+                  onBlur={() => setNumPeopleStr(String(numPeople))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background"
                 />
+                {isVolume && space.discount_min_people != null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Descuento de {Math.round(space.discount_value || 0)}% desde {space.discount_min_people} personas
+                    {volumeApplies ? " ✓ aplicado" : ""}
+                  </p>
+                )}
               </div>
-            ) : (
-              <div className="relative aspect-[16/9] rounded-2xl overflow-hidden border border-border bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                <MapPin className="w-4 h-4 mr-2" /> Sin coordenadas registradas
-              </div>
-            )}
-            <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" /> {space.address}, {space.city}
-            </p>
-          </section>
 
-          <section>
-            <h2 className="font-display text-2xl font-semibold mb-4">Reseñas</h2>
-            <ReviewList
-              reviews={reviewsData?.items ?? []}
-              total={reviewsData?.meta?.total ?? 0}
-              isLoading={reviewsLoading}
-            />
-          </section>
-
-          {/* SC-002 — Espacios similares recomendados */}
-          <section>
-            <h2 className="font-display text-2xl font-semibold mb-4">Espacios Similares Recomendados</h2>
-            {similarLoading ? (
-              <p className="text-muted-foreground text-sm">Cargando recomendaciones…</p>
-            ) : similar.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No hay recomendaciones disponibles por ahora.</p>
-            ) : (
-              <div className="flex gap-5 overflow-x-auto pb-3 snap-x snap-mandatory -mx-1 px-1"
-                style={{ scrollbarWidth: "thin" }}>
-                {similar.map((s, i) => (
-                  <div key={s.id} className="min-w-[260px] max-w-[260px] flex-shrink-0 snap-start">
-                    <SpaceCard space={s} index={i} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <aside className="lg:sticky lg:top-24 self-start">
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-            <div className="flex items-baseline gap-2 mb-5">
-              {space.discount_active && space.discounted_price != null && !isVolume ? (
-                <>
-                  <span className="text-lg line-through text-muted-foreground">{formatCLP(space.price_per_hour)}</span>
-                  <span className="text-2xl font-bold text-primary">{formatCLP(space.discounted_price)}</span>
-                </>
-              ) : (
-                <span className="text-2xl font-bold">{formatCLP(space.price_per_hour)}</span>
-              )}
-              <span className="text-muted-foreground">/ hora</span>
-            </div>
-
-            <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
-              <CalIcon className="w-3 h-3" /> Fecha
-            </label>
-            <input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-background mb-3" />
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1">Inicio</label>
-                <select value={start} onChange={(e) => {
-                  const newStart = e.target.value;
-                  setStart(newStart);
-                  const validEnds = generateSlots().filter(t => t > newStart);
-                  if (validEnds.length > 0 && end <= newStart) setEnd(validEnds[0]);
-                }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background">
-                  {generateSlots().map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Fin</label>
-                <select value={end} onChange={(e) => setEnd(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background">
-                  {generateSlots().filter(t => t > start).map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-5">
-              <label className="block text-xs font-semibold mb-1">Número de personas</label>
-              <input
-                type="number" min={1} max={space.capacity} value={numPeopleStr}
-                onChange={(e) => setNumPeopleStr(e.target.value)}
-                onBlur={() => setNumPeopleStr(String(numPeople))}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background"
-              />
-              {isVolume && space.discount_min_people != null && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Descuento de {Math.round(space.discount_value || 0)}% desde {space.discount_min_people} personas
-                  {volumeApplies ? " ✓ aplicado" : ""}
+              {slots && (
+                <p className={cn("text-xs mb-3", slotAvailable ? "text-success" : "text-destructive")}>
+                  {slotAvailable ? "✓ Horario disponible" : "✗ Horario no disponible"}
                 </p>
               )}
-            </div>
 
-            {slots && (
-              <p className={cn("text-xs mb-3", slotAvailable ? "text-success" : "text-destructive")}>
-                {slotAvailable ? "✓ Horario disponible" : "✗ Horario no disponible"}
-              </p>
-            )}
+              <Button variant="hero" size="lg" className="w-full" disabled={busy || !space.is_active} onClick={reserve}>
+                {busy ? "Procesando..." : space.is_active ? "Reservar ahora" : "No disponible"}
+              </Button>
 
-            <Button variant="hero" size="lg" className="w-full" disabled={busy || !space.is_active} onClick={reserve}>
-              {busy ? "Procesando..." : space.is_active ? "Reservar ahora" : "No disponible"}
-            </Button>
-
-            {hours > 0 && (
-              <div className="mt-5 pt-5 border-t border-border space-y-2 text-sm">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{formatCLP(space.price_per_hour)} × {hours} hora{hours > 1 ? "s" : ""}</span>
-                  <span>{formatCLP(total)}</span>
-                </div>
-                {total < subtotalBase && (
-                  <div className="flex justify-between text-primary">
-                    <span>Descuento</span>
-                    <span>-{formatCLP(subtotalBase - total)}</span>
+              {hours > 0 && (
+                <div className="mt-5 pt-5 border-t border-border space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>{formatCLP(space.price_per_hour)} × {hours} hora{hours > 1 ? "s" : ""}</span>
+                    <span>{formatCLP(total)}</span>
                   </div>
-                )}
-                <div className="flex justify-between font-semibold pt-2 border-t border-border">
-                  <span>Total</span><span>{formatCLP(total)}</span>
+                  {total < subtotalBase && (
+                    <div className="flex justify-between text-primary">
+                      <span>Descuento</span>
+                      <span>-{formatCLP(subtotalBase - total)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold pt-2 border-t border-border">
+                    <span>Total</span><span>{formatCLP(total)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">El total final lo confirma el servidor al crear la reserva.</p>
                 </div>
-                <p className="text-xs text-muted-foreground">El total final lo confirma el servidor al crear la reserva.</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </aside>
+        </section>
+
+        {/* Ubicación */}
+        <section>
+          <h2 className="font-display text-2xl font-semibold mb-4">Ubicación</h2>
+          {space.lat && space.lng ? (
+            <div className="rounded-2xl overflow-hidden border border-border" style={{ height: "340px" }}>
+              <SpaceMap lat={space.lat} lng={space.lng} name={space.name} address={space.address} height="340px" />
+            </div>
+          ) : (
+            <div className="relative aspect-[16/9] rounded-2xl overflow-hidden border border-border bg-muted flex items-center justify-center text-muted-foreground text-sm">
+              <MapPin className="w-4 h-4 mr-2" /> Sin coordenadas registradas
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5" /> {space.address}, {space.city}
+          </p>
+        </section>
+
+        {/* Reseñas */}
+        <section>
+          <h2 className="font-display text-2xl font-semibold mb-4">Reseñas</h2>
+          <ReviewList reviews={reviewsData?.items ?? []} total={reviewsData?.meta?.total ?? 0} isLoading={reviewsLoading} />
+        </section>
+
+        {/* SC-002 — Espacios similares */}
+        <section>
+          <h2 className="font-display text-2xl font-semibold mb-4">Espacios Similares Recomendados</h2>
+          {similarLoading ? (
+            <p className="text-muted-foreground text-sm">Cargando recomendaciones…</p>
+          ) : similar.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No hay recomendaciones disponibles por ahora.</p>
+          ) : (
+            <div className="flex gap-5 overflow-x-auto pb-3 snap-x snap-mandatory -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+              {similar.map((s, i) => (
+                <div key={s.id} className="min-w-[260px] max-w-[260px] flex-shrink-0 snap-start">
+                  <SpaceCard space={s} index={i} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
