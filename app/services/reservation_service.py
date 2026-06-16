@@ -3,7 +3,7 @@ import math
 import structlog
 from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.exc import IntegrityError
 
 from app.models.reservation import Reservation
@@ -71,7 +71,7 @@ async def create_reservation(
 
 
 async def confirm_reservation(reservation_id: uuid.UUID, session: AsyncSession) -> Reservation:
-    reservation = await _get_or_raise(reservation_id, session)
+    reservation = await _get_or_raise(reservation_id, session, for_update=True)
     if reservation.status != ReservationStatus.PENDING:
         raise DomainException(f"No se puede confirmar una reserva en estado '{reservation.status}'")
     reservation.status = ReservationStatus.CONFIRMED
@@ -128,7 +128,7 @@ async def cancel_reservation(
     reason: str | None,
     session: AsyncSession,
 ) -> Reservation:
-    reservation = await _get_or_raise(reservation_id, session)
+    reservation = await _get_or_raise(reservation_id, session, for_update=True)
 
     if str(reservation.client_id) != str(user_id):
         # allow provider too — covered by caller
@@ -212,8 +212,11 @@ async def list_incoming_reservations(
     return out
 
 
-async def _get_or_raise(reservation_id: uuid.UUID, session: AsyncSession) -> Reservation:
-    result = await session.execute(select(Reservation).where(Reservation.id == reservation_id))
+async def _get_or_raise(reservation_id: uuid.UUID, session: AsyncSession, for_update: bool = False) -> Reservation:
+    q = select(Reservation).where(Reservation.id == reservation_id)
+    if for_update:
+        q = q.with_for_update()
+    result = await session.execute(q)
     reservation = result.scalar_one_or_none()
     if not reservation:
         raise NotFoundError("Reserva")

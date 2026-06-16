@@ -10,6 +10,7 @@ from app.models.reservation import Reservation
 from app.constants import PaymentStatus, PaymentProvider, ReservationStatus
 from app.exceptions import NotFoundError, DomainException, ForbiddenError
 from app.services.reservation_service import confirm_reservation
+from sqlalchemy.exc import IntegrityError
 from app.config import get_settings
 from app.utils.time_utils import now_chile
 
@@ -173,7 +174,9 @@ async def handle_stripe_webhook(payload: bytes, sig_header: str, session: AsyncS
 
 
 async def _handle_stripe_success(session_id: str, session: AsyncSession) -> None:
-    result = await session.execute(select(Payment).where(Payment.token == session_id))
+    result = await session.execute(
+        select(Payment).where(Payment.token == session_id).with_for_update()
+    )
     payment = result.scalar_one_or_none()
     if not payment or payment.status == PaymentStatus.PAID:
         return
@@ -181,7 +184,11 @@ async def _handle_stripe_success(session_id: str, session: AsyncSession) -> None
     payment.status = PaymentStatus.PAID
     payment.authorized_at = now_chile()
     payment.raw_response = {"stripe_session_id": session_id}
-    await confirm_reservation(payment.reservation_id, session)
+    try:
+        await confirm_reservation(payment.reservation_id, session)
+    except DomainException:
+        # reservation already cancelled/confirmed — payment still gets marked PAID
+        logger.warning("stripe_confirm_skipped", session_id=session_id[:12], reservation_id=str(payment.reservation_id))
     await session.commit()
     logger.info("stripe_payment_confirmed", session_id=session_id[:12])
 
@@ -189,7 +196,9 @@ async def _handle_stripe_success(session_id: str, session: AsyncSession) -> None
 # --- Transbank confirm ---
 
 async def confirm_transbank(token_ws: str, session: AsyncSession) -> Payment:
-    result = await session.execute(select(Payment).where(Payment.token == token_ws))
+    result = await session.execute(
+        select(Payment).where(Payment.token == token_ws).with_for_update()
+    )
     payment = result.scalar_one_or_none()
     if not payment:
         raise NotFoundError("Pago")
@@ -215,7 +224,10 @@ async def confirm_transbank(token_ws: str, session: AsyncSession) -> Payment:
     if response.get("response_code", -1) == 0:
         payment.status = PaymentStatus.PAID
         payment.authorized_at = now_chile()
-        await confirm_reservation(payment.reservation_id, session)
+        try:
+            await confirm_reservation(payment.reservation_id, session)
+        except DomainException:
+            logger.warning("transbank_confirm_skipped", token=token_ws[:8], reservation_id=str(payment.reservation_id))
         logger.info("transbank_payment_confirmed", token=token_ws[:8])
     else:
         payment.status = PaymentStatus.FAILED

@@ -3,12 +3,12 @@ from datetime import date, time, timedelta, datetime
 from dataclasses import dataclass
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 
 from app.models.space import SpaceSchedule
 from app.models.reservation import Reservation
 from app.constants import ReservationStatus
-from app.utils.time_utils import slot_overlaps
+from app.utils.time_utils import slot_overlaps, now_chile
 
 logger = structlog.get_logger()
 
@@ -64,6 +64,11 @@ async def get_available_slots(
                     ReservationStatus.ACTIVE,
                     ReservationStatus.PENDING,
                 ]),
+                # exclude expired PENDING reservations
+                or_(
+                    Reservation.status != ReservationStatus.PENDING,
+                    Reservation.expires_at > now_chile(),
+                ),
             )
         )
     )
