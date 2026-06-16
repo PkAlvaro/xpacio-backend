@@ -58,6 +58,7 @@ const SpaceDetail = () => {
   const effectivePrice = volumeApplies && space.discountedPrice != null
     ? space.discountedPrice
     : space.price_per_hour;
+  const subtotalBase = hours * space.price_per_hour;
   const total = hours * effectivePrice;
 
   const slotAvailable = slots?.find(s => s.start === start)?.available ?? true;
