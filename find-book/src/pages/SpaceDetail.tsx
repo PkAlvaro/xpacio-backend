@@ -50,7 +50,7 @@ const SpaceDetail = () => {
   const [activeImg, setActiveImg] = useState(0);
   const [numPeopleStr, setNumPeopleStr] = useState("1");
 
-  const { data: slots } = useAvailability(id, date, 30);
+  const { data: slots } = useAvailability(id, date, 60);
   const { data: subSpaces } = useSubSpaces(id);
   const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
   const { data: reviewsData, isLoading: reviewsLoading } = useSpaceReviews(id);
@@ -85,8 +85,6 @@ const SpaceDetail = () => {
   const subtotalBase = hours * space.price_per_hour;
   const total = hours * effectivePrice;
 
-  const slotAvailable = slots?.find(s => s.start === start)?.available ?? true;
-
   const reserve = async () => {
     if (!user) {
       toast.error("Inicia sesión para reservar");
@@ -95,7 +93,6 @@ const SpaceDetail = () => {
     }
     if (hours <= 0) return toast.error("El horario de fin debe ser posterior al inicio");
     if (endDate < date) return toast.error("La fecha de fin no puede ser anterior a la de inicio");
-    if (!slotAvailable) return toast.error("El horario seleccionado no está disponible");
 
     try {
       const reservation = await createReservation.mutateAsync({
