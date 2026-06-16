@@ -3,7 +3,8 @@ import { Navigate, useLocation } from "react-router-dom";
 import { Lock, CreditCard, Globe } from "lucide-react";
 import { fetchSpace, formatCLP } from "@/lib/spaces";
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
+import type { ApiResponse } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Steps } from "./Booking";
 import { cn } from "@/lib/utils";
@@ -41,10 +42,11 @@ const Payment = () => {
   const pay = async () => {
     setLoading(true);
     try {
-      const res = await api<InitiateResponse>(`/payments/${provider}/initiate`, {
+      const resp = await apiRequest<ApiResponse<InitiateResponse>>(`/payments/${provider}/initiate`, {
         method: "POST",
-        body: { reservation_id: reservation.id },
+        body: JSON.stringify({ reservation_id: reservation.id }),
       });
+      const res = resp.data!;
       // Redirige a la pasarela (Webpay o Stripe Checkout)
       window.location.href = res.redirect_url;
     } catch (err) {
