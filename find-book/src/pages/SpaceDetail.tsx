@@ -11,6 +11,8 @@ import { useSpace, useAvailability, useSubSpaces, useSimilarSpaces } from "@/hoo
 import { SpaceCard } from "@/components/SpaceCard";
 import { useCreateReservation, useInitiatePayment } from "@/hooks/useReservations";
 import { useMe } from "@/hooks/useAuth";
+import { useSpaceReviews } from "@/hooks/useReviews";
+import ReviewList from "@/components/ReviewList";
 import { ApiError } from "@/lib/api";
 import type { SubSpaceItem } from "@/types/api";
 
@@ -34,6 +36,7 @@ const SpaceDetail = () => {
   const { data: slots } = useAvailability(id, date);
   const { data: subSpaces } = useSubSpaces(id);
   const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
+  const { data: reviewsData, isLoading: reviewsLoading } = useSpaceReviews(id);
   const createReservation = useCreateReservation();
   const initiatePayment = useInitiatePayment();
 
@@ -182,6 +185,15 @@ const SpaceDetail = () => {
             <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" /> {space.address}, {space.city}
             </p>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold mb-4">Reseñas</h2>
+            <ReviewList
+              reviews={reviewsData?.items ?? []}
+              total={reviewsData?.meta?.total ?? 0}
+              isLoading={reviewsLoading}
+            />
           </section>
 
           {/* SC-002 — Espacios similares recomendados */}

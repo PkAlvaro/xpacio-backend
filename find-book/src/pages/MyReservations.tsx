@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Clock, X } from "lucide-react";
+import { Calendar, Clock, X, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useMyReservations, useCancelReservation } from "@/hooks/useReservations";
+import ReviewForm from "@/components/ReviewForm";
 import { ApiError } from "@/lib/api";
 import type { ReservationStatus } from "@/types/api";
 
@@ -42,6 +44,8 @@ interface ApiReservation {
 const MyReservations = () => {
   const { data: reservations = [], isLoading } = useMyReservations();
   const cancel = useCancelReservation();
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
 
   const handleCancel = async (id: string) => {
     try {
@@ -99,7 +103,7 @@ const MyReservations = () => {
                   </span>
                   <span className="font-semibold text-foreground">{formatCLP(r.total)}</span>
                 </div>
-                <div className="flex gap-2 mt-4">
+                <div className="flex gap-2 mt-4 flex-wrap">
                   {(r.status === "pending" || r.status === "confirmed") && (
                     <Button
                       variant="ghost"
@@ -110,7 +114,28 @@ const MyReservations = () => {
                       <X className="w-4 h-4" /> Cancelar
                     </Button>
                   )}
+                  {r.status === "finished" && !reviewedIds.has(r.id) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setReviewingId(reviewingId === r.id ? null : r.id)}
+                    >
+                      <Star className="w-4 h-4" />
+                      {reviewingId === r.id ? "Cerrar" : "Dejar reseña"}
+                    </Button>
+                  )}
                 </div>
+                {reviewingId === r.id && (
+                  <div className="mt-3">
+                    <ReviewForm
+                      reservationId={r.id}
+                      onSuccess={() => {
+                        setReviewingId(null);
+                        setReviewedIds((prev) => new Set(prev).add(r.id));
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           ))}

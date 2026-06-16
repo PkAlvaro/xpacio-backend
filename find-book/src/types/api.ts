@@ -173,6 +173,23 @@ export interface PaymentInitiateResponse {
   token: string;
 }
 
+// --- Reviews ---
+
+export interface Review {
+  id: string;
+  reservation_id: string;
+  space_id: string;
+  rating: number;
+  comment?: string;
+  client_name: string;
+  created_at: string;
+}
+
+export interface ReviewCreate {
+  rating: number;
+  comment?: string;
+}
+
 // --- Admin ---
 
 export interface AdminStats {
