@@ -39,6 +39,20 @@ export function useSubSpaces(spaceId: string | undefined) {
   });
 }
 
+export function useSimilarSpaces(spaceId: string | undefined, limit = 4) {
+  return useQuery({
+    queryKey: ["similar-spaces", spaceId, limit],
+    queryFn: async () => {
+      const res = await apiRequest<ApiResponse<SpaceListItem[]>>(
+        `/spaces/${spaceId}/similar?limit=${limit}`
+      );
+      return res.data ?? [];
+    },
+    enabled: !!spaceId,
+    staleTime: 60_000,
+  });
+}
+
 export function useAvailability(
   spaceId: string | undefined,
   date: string | undefined,

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { SpaceMap } from "@/components/SpaceMap";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useSpace, useAvailability, useSubSpaces } from "@/hooks/useSpaces";
+import { useSpace, useAvailability, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
+import { SpaceCard } from "@/components/SpaceCard";
 import { useCreateReservation, useInitiatePayment } from "@/hooks/useReservations";
 import { useMe } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
@@ -31,6 +32,7 @@ const SpaceDetail = () => {
 
   const { data: slots } = useAvailability(id, date);
   const { data: subSpaces } = useSubSpaces(id);
+  const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
   const createReservation = useCreateReservation();
   const initiatePayment = useInitiatePayment();
 
