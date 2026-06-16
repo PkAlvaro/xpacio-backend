@@ -29,6 +29,7 @@ const SpaceDetail = () => {
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("12:00");
   const [activeImg, setActiveImg] = useState(0);
+  const [numPeopleStr, setNumPeopleStr] = useState("1");
 
   const { data: slots } = useAvailability(id, date);
   const { data: subSpaces } = useSubSpaces(id);
@@ -51,7 +52,13 @@ const SpaceDetail = () => {
   const startMins = toMinutes(start);
   const endMins = toMinutes(end);
   const hours = Math.max(0, Math.ceil((endMins - startMins) / 60));
-  const total = hours * space.price_per_hour;
+  const numPeople = Math.max(1, Math.min(space.capacity, parseInt(numPeopleStr, 10) || 1));
+  const isVolume = space.discountType === "volume";
+  const volumeApplies = isVolume && space.discountMinPeople != null && numPeople >= space.discountMinPeople;
+  const effectivePrice = volumeApplies && space.discountedPrice != null
+    ? space.discountedPrice
+    : space.price_per_hour;
+  const total = hours * effectivePrice;
 
   const slotAvailable = slots?.find(s => s.start === start)?.available ?? true;
 
@@ -70,6 +77,7 @@ const SpaceDetail = () => {
         date,
         start_time: start + ":00",
         end_time: end + ":00",
+        num_people: numPeople,
       });
       toast.success("Reserva creada. Redirigiendo al pago...");
       await initiatePayment.mutateAsync(reservation.id);

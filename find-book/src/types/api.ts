@@ -74,6 +74,11 @@ export interface SpaceDetail {
   images: SpaceImage[];
   schedules: SpaceSchedule[];
   amenities: string[];
+  discountType?: string;
+  discountValue?: number;
+  discountActive?: boolean;
+  discountMinPeople?: number;
+  discountedPrice?: number;
 }
 
 export interface SubSpaceItem {
