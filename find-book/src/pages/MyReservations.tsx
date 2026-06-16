@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Calendar, Clock, X, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useMyReservations, useCancelReservation } from "@/hooks/useReservations";
 import ReviewForm from "@/components/ReviewForm";
 import { ApiError } from "@/lib/api";
+import { useMe } from "@/hooks/useAuth";
 import type { ReservationStatus } from "@/types/api";
 
 const formatCLP = (n: number) =>
@@ -42,7 +43,9 @@ interface ApiReservation {
 }
 
 const MyReservations = () => {
-  const { data: reservations = [], isLoading } = useMyReservations();
+  const navigate = useNavigate();
+  const { data: user, isLoading: authLoading } = useMe();
+  const { data: reservations = [], isLoading, isError } = useMyReservations();
   const cancel = useCancelReservation();
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
@@ -56,12 +59,23 @@ const MyReservations = () => {
     }
   };
 
+  if (!authLoading && !user) {
+    return (
+      <div className="container py-20 max-w-xl text-center">
+        <p className="text-muted-foreground mb-4">Inicia sesión para ver tus reservas.</p>
+        <Button variant="hero" onClick={() => navigate(`/login?redirect=${encodeURIComponent("/mis-reservas")}`)}>
+          Iniciar sesión
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-10 max-w-4xl">
       <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Mis reservas</h1>
       <p className="text-muted-foreground mb-8">Gestiona tus arriendos pasados y próximos.</p>
 
-      {isLoading && (
+      {(isLoading || authLoading) && (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />
@@ -69,14 +83,23 @@ const MyReservations = () => {
         </div>
       )}
 
-      {!isLoading && reservations.length === 0 && (
+      {isError && (
+        <div className="text-center py-20 border border-dashed border-border rounded-2xl">
+          <p className="text-muted-foreground mb-4">No se pudieron cargar tus reservas.</p>
+          <Button variant="hero" onClick={() => navigate(`/login?redirect=${encodeURIComponent("/mis-reservas")}`)}>
+            Iniciar sesión nuevamente
+          </Button>
+        </div>
+      )}
+
+      {!isLoading && !isError && reservations.length === 0 && (
         <div className="text-center py-20 border border-dashed border-border rounded-2xl">
           <p className="text-muted-foreground mb-4">Aún no tienes reservas.</p>
           <Link to="/buscar"><Button variant="hero">Explorar espacios</Button></Link>
         </div>
       )}
 
-      {!isLoading && reservations.length > 0 && (
+      {!isLoading && !isError && reservations.length > 0 && (
         <div className="space-y-4">
           {reservations.map((r) => (
             <div key={r.id} className="bg-card border border-border rounded-2xl p-4 shadow-soft flex flex-col md:flex-row gap-4">
