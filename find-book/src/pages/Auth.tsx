@@ -45,11 +45,12 @@ export const Register = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isHost, setIsHost] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await register.mutateAsync({ name, email, password });
+      await register.mutateAsync({ name, email, password, role: isHost ? "provider" : "client" });
       toast.success("¡Cuenta creada!");
       navigate("/");
     } catch (err) {
@@ -63,6 +64,18 @@ export const Register = () => {
         <Field label="Nombre" placeholder="Juan Pérez" value={name} onChange={(e) => setName(e.target.value)} />
         <Field label="Email" type="email" placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field label="Contraseña" type="password" placeholder="Mínimo 8 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <label className="flex items-center gap-3 p-3 rounded-xl border border-border cursor-pointer hover:bg-muted/50 transition-smooth">
+          <input
+            type="checkbox"
+            checked={isHost}
+            onChange={(e) => setIsHost(e.target.checked)}
+            className="w-4 h-4 accent-primary"
+          />
+          <div>
+            <p className="text-sm font-medium">Quiero ser anfitrión</p>
+            <p className="text-xs text-muted-foreground">Publica y gestiona tus propios espacios</p>
+          </div>
+        </label>
         <Button type="submit" variant="hero" size="lg" className="w-full" disabled={register.isPending}>
           {register.isPending ? "Creando cuenta..." : "Crear cuenta"}
         </Button>

@@ -33,7 +33,7 @@ const SpaceDetail = () => {
   const [activeImg, setActiveImg] = useState(0);
   const [numPeopleStr, setNumPeopleStr] = useState("1");
 
-  const { data: slots } = useAvailability(id, date);
+  const { data: slots } = useAvailability(id, date, 30);
   const { data: subSpaces } = useSubSpaces(id);
   const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
   const { data: reviewsData, isLoading: reviewsLoading } = useSpaceReviews(id);
@@ -56,11 +56,14 @@ const SpaceDetail = () => {
   const endMins = toMinutes(end);
   const hours = Math.max(0, Math.ceil((endMins - startMins) / 60));
   const numPeople = Math.max(1, Math.min(space.capacity, parseInt(numPeopleStr, 10) || 1));
-  const isVolume = space.discountType === "volume";
-  const volumeApplies = isVolume && space.discountMinPeople != null && numPeople >= space.discountMinPeople;
-  const effectivePrice = volumeApplies && space.discountedPrice != null
-    ? space.discountedPrice
-    : space.price_per_hour;
+  const isVolume = space.discount_type === "volume";
+  const isPercentage = space.discount_type === "percentage";
+  const volumeApplies = isVolume && space.discount_min_people != null && numPeople >= space.discount_min_people;
+  const percentageApplies = isPercentage && space.discount_active && space.discounted_price != null;
+  const effectivePrice =
+    (volumeApplies || percentageApplies) && space.discounted_price != null
+      ? space.discounted_price
+      : space.price_per_hour;
   const subtotalBase = hours * space.price_per_hour;
   const total = hours * effectivePrice;
 
@@ -219,7 +222,14 @@ const SpaceDetail = () => {
         <aside className="lg:sticky lg:top-24 self-start">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <div className="flex items-baseline gap-2 mb-5">
-              <span className="text-2xl font-bold">{formatCLP(space.price_per_hour)}</span>
+              {space.discount_active && space.discounted_price != null && !isVolume ? (
+                <>
+                  <span className="text-lg line-through text-muted-foreground">{formatCLP(space.price_per_hour)}</span>
+                  <span className="text-2xl font-bold text-primary">{formatCLP(space.discounted_price)}</span>
+                </>
+              ) : (
+                <span className="text-2xl font-bold">{formatCLP(space.price_per_hour)}</span>
+              )}
               <span className="text-muted-foreground">/ hora</span>
             </div>
 
@@ -254,9 +264,9 @@ const SpaceDetail = () => {
                 onBlur={() => setNumPeopleStr(String(numPeople))}
                 className="w-full px-3 py-2.5 rounded-xl border border-border bg-background"
               />
-              {isVolume && space.discountMinPeople != null && (
+              {isVolume && space.discount_min_people != null && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Descuento de {Math.round(space.discountValue || 0)}% desde {space.discountMinPeople} personas
+                  Descuento de {Math.round(space.discount_value || 0)}% desde {space.discount_min_people} personas
                   {volumeApplies ? " ✓ aplicado" : ""}
                 </p>
               )}

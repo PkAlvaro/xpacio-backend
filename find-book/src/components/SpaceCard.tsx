@@ -11,7 +11,7 @@ const PLACEHOLDER = "https://images.unsplash.com/photo-1497366216548-37526070297
 
 export const SpaceCard = ({ space, index = 0 }: { space: SpaceListItem; index?: number }) => {
   const image = space.primary_image ?? PLACEHOLDER;
-  const hasDiscount = space.discount_active && !!space.discount_value;
+  const hasDiscount = space.discount_active && !!space.discount_value && space.discount_type !== "volume";
 
   return (
     <motion.div
@@ -39,7 +39,7 @@ export const SpaceCard = ({ space, index = 0 }: { space: SpaceListItem; index?: 
             {hasDiscount && (
               <span className="px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md bg-primary text-primary-foreground inline-flex items-center gap-1">
                 <Tag className="w-3 h-3" />
-                {space.discountValue ? `-${Math.round(space.discountValue)}%` : "Oferta"}
+                {space.discount_value ? `-${Math.round(space.discount_value)}%` : "Oferta"}
               </span>
             )}
           </div>
@@ -62,7 +62,14 @@ export const SpaceCard = ({ space, index = 0 }: { space: SpaceListItem; index?: 
             <Users className="w-3.5 h-3.5" /> Hasta {space.capacity} personas · {space.type}
           </p>
           <p className="pt-1">
-            <span className="font-semibold">{formatCLP(space.price_per_hour)}</span>
+            {hasDiscount && space.discounted_price != null ? (
+              <>
+                <span className="text-sm line-through text-muted-foreground mr-1">{formatCLP(space.price_per_hour)}</span>
+                <span className="font-semibold text-primary">{formatCLP(space.discounted_price)}</span>
+              </>
+            ) : (
+              <span className="font-semibold">{formatCLP(space.price_per_hour)}</span>
+            )}
             <span className="text-muted-foreground text-sm"> / hora</span>
           </p>
         </div>

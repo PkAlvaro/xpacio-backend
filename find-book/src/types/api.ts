@@ -74,11 +74,11 @@ export interface SpaceDetail {
   images: SpaceImage[];
   schedules: SpaceSchedule[];
   amenities: string[];
-  discountType?: string;
-  discountValue?: number;
-  discountActive?: boolean;
-  discountMinPeople?: number;
-  discountedPrice?: number;
+  discount_type?: string;
+  discount_value?: number;
+  discount_active?: boolean;
+  discount_min_people?: number;
+  discounted_price?: number;
 }
 
 export interface SubSpaceItem {
@@ -169,8 +169,9 @@ export interface Payment {
 
 export interface PaymentInitiateResponse {
   payment_id: string;
-  webpay_url: string;
+  redirect_url: string;
   token: string;
+  provider: string;
 }
 
 // --- Reviews ---

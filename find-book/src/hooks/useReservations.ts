@@ -21,6 +21,7 @@ export function useCreateReservation() {
       date: string;
       start_time: string;
       end_time: string;
+      num_people?: number;
     }) => {
       const res = await apiRequest<ApiResponse<Reservation>>("/reservations", {
         method: "POST",
@@ -55,14 +56,13 @@ export function useInitiatePayment() {
   return useMutation({
     mutationFn: async (reservationId: string) => {
       const res = await apiRequest<ApiResponse<PaymentInitiateResponse>>(
-        "/payments/initiate",
+        "/payments/transbank/initiate",
         { method: "POST", body: JSON.stringify({ reservation_id: reservationId }) }
       );
       return res.data;
     },
     onSuccess: (data) => {
-      // redirect to Transbank
-      window.location.href = data.webpay_url;
+      window.location.href = data.redirect_url;
     },
   });
 }
