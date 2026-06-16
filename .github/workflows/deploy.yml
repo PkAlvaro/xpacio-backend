@@ -33,6 +33,9 @@ jobs:
             echo "=== Rolling restart ==="
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend api worker beat
 
+            echo "=== Reload nginx (re-resolve upstream DNS) ==="
+            docker exec xpacio-backend-nginx-1 nginx -s reload 2>/dev/null || true
+
             echo "=== Wait for health ==="
             for i in $(seq 1 18); do
               if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
@@ -47,9 +50,6 @@ jobs:
               fi
               sleep 10
             done
-
-            echo "=== Reload nginx ==="
-            docker exec xpacio-backend-nginx-1 nginx -s reload 2>/dev/null || true
 
             echo "=== Deploy completo ==="
             docker compose -f docker-compose.prod.yml ps
