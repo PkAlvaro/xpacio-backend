@@ -73,7 +73,7 @@ const SpaceDetail = () => {
   const reserve = async () => {
     if (!user) {
       toast.error("Inicia sesión para reservar");
-      navigate("/login");
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
     if (hours <= 0) return toast.error("El horario de fin debe ser posterior al inicio");
