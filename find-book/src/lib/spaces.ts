@@ -1,4 +1,4 @@
-import { api, apiRequest } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import office from "@/assets/space-office.jpg";
 import court from "@/assets/space-court.jpg";
 import meeting from "@/assets/space-meeting.jpg";
@@ -133,13 +133,13 @@ export async function fetchSpaces(filters: SpaceFilters = {}): Promise<Space[]> 
 }
 
 export async function fetchSpace(id: string): Promise<Space> {
-  const data = await api<ApiSpace>(`/spaces/${id}`);
+  const data = await apiRequest<ApiSpace>(`/spaces/${id}`);
   return mapSpace(data);
 }
 
 export async function fetchSimilarSpaces(id: string): Promise<Space[]> {
   try {
-    const data = await api<ApiSpace[]>(`/spaces/${id}/similar`);
+    const data = await apiRequest<ApiSpace[]>(`/spaces/${id}/similar`);
     return (data || []).map(mapSpace);
   } catch {
     return [];
@@ -147,7 +147,7 @@ export async function fetchSimilarSpaces(id: string): Promise<Space[]> {
 }
 
 export async function fetchMySpaces(): Promise<Space[]> {
-  const data = await api<ApiSpace[]>("/spaces/mine");
+  const data = await apiRequest<ApiSpace[]>("/spaces/mine");
   return (data || []).map(mapSpace);
 }
 
@@ -159,7 +159,7 @@ export interface AvailabilitySlot {
 
 export async function fetchAvailability(id: string, date: string): Promise<AvailabilitySlot[]> {
   try {
-    const data = await api<AvailabilitySlot[]>(`/spaces/${id}/availability`, { query: { date } });
+    const data = await apiRequest<AvailabilitySlot[]>(`/spaces/${id}/availability`, { query: { date } });
     return data || [];
   } catch {
     return [];
@@ -175,7 +175,7 @@ export interface OfferUpdate {
 }
 
 export async function updateSpaceOffer(id: string, payload: OfferUpdate): Promise<Space> {
-  const data = await api<ApiSpace>(`/spaces/${id}`, { method: "PATCH", body: payload });
+  const data = await apiRequest<ApiSpace>(`/spaces/${id}`, { method: "PATCH", body: payload });
   return mapSpace(data);
 }
 
@@ -216,7 +216,7 @@ export interface SpaceCreatePayload {
 }
 
 export async function createSpace(payload: SpaceCreatePayload): Promise<Space> {
-  const data = await api<ApiSpace>("/spaces", { method: "POST", body: payload });
+  const data = await apiRequest<ApiSpace>("/spaces", { method: "POST", body: payload });
   return mapSpace(data);
 }
 
