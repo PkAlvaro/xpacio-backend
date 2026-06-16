@@ -106,9 +106,10 @@ async def logout(
     response: Response,
     redis: aioredis.Redis = Depends(get_redis),
     _=Depends(get_current_user),
+    refresh_cookie: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
 ):
     token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-    await auth_service.logout_user(token, redis)
+    await auth_service.logout_user(token, refresh_cookie, redis)
     _clear_refresh_cookie(response)
 
 

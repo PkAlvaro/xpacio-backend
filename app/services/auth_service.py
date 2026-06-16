@@ -112,10 +112,16 @@ async def refresh_tokens(
     return tokens
 
 
-async def logout_user(access_token: str, redis: aioredis.Redis) -> None:
+async def logout_user(access_token: str, refresh_token: str | None, redis: aioredis.Redis) -> None:
     token_data = decode_token(access_token)
     ttl = settings.ACCESS_TOKEN_TTL_MINUTES * 60
     await redis.setex(f"{BLACKLIST_PREFIX}{token_data.jti}", ttl, "1")
+    if refresh_token:
+        try:
+            refresh_data = decode_token(refresh_token)
+            await redis.delete(f"{REFRESH_PREFIX}{refresh_data.jti}")
+        except Exception:
+            pass
     logger.info("user_logout", jti=token_data.jti)
 
 

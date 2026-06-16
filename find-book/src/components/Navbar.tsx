@@ -3,7 +3,7 @@ import { Building2, Menu, User, LayoutDashboard, LogOut, HomeIcon } from "lucide
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useMe } from "@/hooks/useAuth";
+import { useMe, useLogout } from "@/hooks/useAuth";
 import { clearTokens } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,13 +19,18 @@ export const Navbar = () => {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: user, isLoading } = useMe();
+  const logoutMut = useLogout();
 
-  const logout = () => {
-    clearTokens();
-    qc.clear();
-    navigate("/");
+  const logout = async () => {
     setOpen(false);
     setUserMenuOpen(false);
+    try {
+      await logoutMut.mutateAsync();
+    } catch {
+      clearTokens();
+      qc.clear();
+    }
+    navigate("/");
   };
 
   return (
