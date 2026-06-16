@@ -1,0 +1,11 @@
+{
+    auto_https disable_redirects
+}
+
+https://xpacio.cl, https://www.xpacio.cl {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+    reverse_proxy localhost:8080
+    encode gzip
+}
