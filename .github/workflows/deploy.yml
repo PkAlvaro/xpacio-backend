@@ -48,5 +48,8 @@ jobs:
               sleep 10
             done
 
+            echo "=== Reload nginx ==="
+            docker exec xpacio-backend-nginx-1 nginx -s reload 2>/dev/null || true
+
             echo "=== Deploy completo ==="
             docker compose -f docker-compose.prod.yml ps

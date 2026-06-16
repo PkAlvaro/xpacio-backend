@@ -42,5 +42,8 @@ for i in $(seq 1 18); do
 done
 
 echo ""
+echo "--- Reloading nginx (re-resolve upstream IPs) ---"
+docker exec xpacio-backend-nginx-1 nginx -s reload 2>/dev/null || true
+
 echo "=== Deploy completo ==="
 $COMPOSE ps
