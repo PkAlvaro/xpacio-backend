@@ -13,6 +13,49 @@ from app.utils.time_utils import slot_overlaps, now_chile
 logger = structlog.get_logger()
 
 
+async def get_calendar_events(
+    space_id: uuid.UUID,
+    start_date: date,
+    end_date: date,
+    session: AsyncSession,
+) -> list[dict]:
+    """Return occupied reservations as FullCalendar-compatible events."""
+    res_result = await session.execute(
+        select(Reservation).where(
+            and_(
+                Reservation.space_id == space_id,
+                Reservation.date >= start_date,
+                Reservation.date <= end_date,
+                Reservation.status.in_([
+                    ReservationStatus.CONFIRMED,
+                    ReservationStatus.ACTIVE,
+                    ReservationStatus.PENDING,
+                ]),
+                or_(
+                    Reservation.status != ReservationStatus.PENDING,
+                    Reservation.expires_at > now_chile(),
+                ),
+            )
+        )
+    )
+    reservations = res_result.scalars().all()
+
+    events = []
+    for r in reservations:
+        start_str = f"{r.date}T{str(r.start_time)[:5]}"
+        end_str = f"{r.date}T{str(r.end_time)[:5]}"
+        events.append({
+            "id": str(r.id),
+            "title": "Ocupado",
+            "start": start_str,
+            "end": end_str,
+            "color": "#ef4444",
+            "textColor": "#fff",
+            "display": "block",
+        })
+    return events
+
+
 @dataclass
 class TimeSlot:
     start: str  # "HH:MM"

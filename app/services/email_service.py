@@ -1,5 +1,7 @@
+import base64
 import structlog
 import resend
+from datetime import datetime, timezone
 from app.config import get_settings
 
 logger = structlog.get_logger()
@@ -92,6 +94,39 @@ def _reservation_html(
 </html>"""
 
 
+def _generate_ics(
+    reservation_id: str,
+    space_name: str,
+    address: str,
+    date: str,
+    start_time: str,
+    end_time: str,
+) -> bytes:
+    now_utc = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dt_start = f"{date.replace('-', '')}T{start_time.replace(':', '')}00"
+    dt_end = f"{date.replace('-', '')}T{end_time.replace(':', '')}00"
+    uid = f"{reservation_id}@xpacio.cl"
+    ics = (
+        "BEGIN:VCALENDAR\r\n"
+        "VERSION:2.0\r\n"
+        "PRODID:-//Xpacio//ES\r\n"
+        "CALSCALE:GREGORIAN\r\n"
+        "METHOD:REQUEST\r\n"
+        "BEGIN:VEVENT\r\n"
+        f"UID:{uid}\r\n"
+        f"DTSTAMP:{now_utc}\r\n"
+        f"DTSTART;TZID=America/Santiago:{dt_start}\r\n"
+        f"DTEND;TZID=America/Santiago:{dt_end}\r\n"
+        f"SUMMARY:Reserva en {space_name}\r\n"
+        f"LOCATION:{address}\r\n"
+        f"DESCRIPTION:ID de reserva: {reservation_id}\r\n"
+        "STATUS:CONFIRMED\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR\r\n"
+    )
+    return ics.encode("utf-8")
+
+
 async def send_reservation_confirmation(
     client_email: str,
     client_name: str,
@@ -110,6 +145,8 @@ async def send_reservation_confirmation(
 
     resend.api_key = settings.RESEND_API_KEY
 
+    ics_bytes = _generate_ics(reservation_id, space_name, address, date, start_time, end_time)
+
     try:
         resend.Emails.send({
             "from": f"Xpacio <{settings.FROM_EMAIL}>",
@@ -126,6 +163,10 @@ async def send_reservation_confirmation(
                 reservation_id=reservation_id,
                 calendar_url=calendar_url,
             ),
+            "attachments": [{
+                "filename": "reserva.ics",
+                "content": base64.b64encode(ics_bytes).decode(),
+            }],
         })
         logger.info("email_sent", to=client_email, reservation_id=reservation_id)
     except Exception as e:

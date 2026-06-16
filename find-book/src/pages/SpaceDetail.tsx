@@ -8,6 +8,7 @@ import { SpaceMap } from "@/components/SpaceMap";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useSpace, useAvailability, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
+import { SpaceCalendar } from "@/components/SpaceCalendar";
 import { SpaceCard } from "@/components/SpaceCard";
 import { useCreateReservation, useInitiatePayment } from "@/hooks/useReservations";
 import { useMe } from "@/hooks/useAuth";
@@ -171,6 +172,20 @@ const SpaceDetail = () => {
               </div>
             </section>
           )}
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold mb-4">Disponibilidad</h2>
+            <SpaceCalendar
+              spaceId={space.id}
+              schedules={space.schedules}
+              onDateSelect={(d, t) => {
+                setDate(d);
+                setStart(t.slice(0, 5));
+                const validEnds = generateSlots().filter(s => s > t.slice(0, 5));
+                if (validEnds.length > 0) setEnd(validEnds[0]);
+              }}
+            />
+          </section>
 
           <section>
             <h2 className="font-display text-2xl font-semibold mb-4">Ubicación</h2>

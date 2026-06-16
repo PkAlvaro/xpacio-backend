@@ -41,6 +41,21 @@ async def get_availability(
     return {"success": True, "data": [{"start": s.start, "end": s.end, "available": s.available} for s in slots]}
 
 
+@router.get(
+    "/spaces/{space_id}/calendar",
+    response_model=dict,
+    summary="Eventos de calendario para un espacio",
+)
+async def get_space_calendar(
+    space_id: uuid.UUID,
+    start: date = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    end: date = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    session: AsyncSession = Depends(get_session),
+):
+    events = await availability_service.get_calendar_events(space_id, start, end, session)
+    return {"success": True, "data": events}
+
+
 @router.post(
     "/reservations",
     response_model=dict,
