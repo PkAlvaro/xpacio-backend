@@ -11,6 +11,7 @@ import { useMe } from "@/hooks/useAuth";
 const Home = () => {
   const { data, isLoading } = useSpaces({ city: "Santiago", page_size: 6 });
   const featured = data?.items ?? [];
+  const active = useSpaces({ page_size: 12 });
   const { data: user } = useMe();
   const publishHref = user?.role === "admin" ? "/admin/espacios/nuevo" : "/registro";
   return (
