@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
@@ -8,8 +8,9 @@ from app.dependencies import get_redis, get_current_user, require_role
 from app.constants import UserRole
 from app.schemas.space import (
     SpaceCreate, SpaceUpdate, SpaceResponse, SpaceListItem,
-    SpaceFilters, ScheduleCreate, SpaceScheduleOut, SubSpaceItem,
+    SpaceFilters, ScheduleCreate, SpaceScheduleOut, SubSpaceItem, SpaceImageOut,
 )
+from app.exceptions import DomainException
 from app.services import space_service
 
 router = APIRouter(prefix="/api/v1/spaces", tags=["spaces"])
@@ -253,6 +254,59 @@ async def set_schedules(
 ):
     result = await space_service.set_schedules(space_id, schedules, user.id, session)
     return {"success": True, "data": [SpaceScheduleOut.model_validate(s).model_dump() for s in result]}
+
+
+@router.post(
+    "/{space_id}/images",
+    response_model=dict,
+    summary="Subir imagen (proveedor dueño)",
+)
+async def upload_image(
+    space_id: uuid.UUID,
+    file: UploadFile = File(...),
+    set_primary: bool = Query(default=False),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise DomainException("Solo se permiten archivos de imagen")
+    space = await space_service.get_space(space_id, session)
+    await space_service._assert_owner(space, user.id, session)
+    img = await space_service.upload_space_image(space_id, file, session, set_primary)
+    return {"success": True, "data": SpaceImageOut.model_validate(img).model_dump()}
+
+
+@router.delete(
+    "/{space_id}/images/{image_id}",
+    status_code=204,
+    summary="Eliminar imagen (proveedor dueño)",
+)
+async def delete_image(
+    space_id: uuid.UUID,
+    image_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    space = await space_service.get_space(space_id, session)
+    await space_service._assert_owner(space, user.id, session)
+    await space_service.delete_space_image(space_id, image_id, session)
+
+
+@router.patch(
+    "/{space_id}/images/{image_id}/primary",
+    response_model=dict,
+    summary="Marcar imagen como principal (proveedor dueño)",
+)
+async def set_primary_image(
+    space_id: uuid.UUID,
+    image_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    space = await space_service.get_space(space_id, session)
+    await space_service._assert_owner(space, user.id, session)
+    await space_service.set_primary_image(space_id, image_id, session)
+    return {"success": True}
 
 
 @router.get(

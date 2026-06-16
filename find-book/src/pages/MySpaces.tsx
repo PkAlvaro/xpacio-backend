@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck, Pencil, ToggleLeft, ToggleRight } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Pencil, ToggleLeft, ToggleRight, ImagePlus, Trash2, Star } from "lucide-react";
 import {
   fetchMySpaces, updateSpaceOffer, updateSpace, createSpace, fetchIncomingReservations,
-  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceUpdatePayload, SpaceType, IncomingReservation,
+  setSchedules, uploadSpaceImage, deleteSpaceImage, setPrimaryImage,
+  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceUpdatePayload, SpaceType, Schedule, SpaceImage, IncomingReservation,
 } from "@/lib/spaces";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
@@ -148,9 +149,20 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
     amenities: [],
   });
   const [amenityInput, setAmenityInput] = useState("");
+  const [schedules, setSchedules2] = useState<Omit<Schedule, "id">[]>([
+    { day_of_week: 0, open_time: "08:00", close_time: "20:00" },
+    { day_of_week: 1, open_time: "08:00", close_time: "20:00" },
+    { day_of_week: 2, open_time: "08:00", close_time: "20:00" },
+    { day_of_week: 3, open_time: "08:00", close_time: "20:00" },
+    { day_of_week: 4, open_time: "08:00", close_time: "20:00" },
+  ]);
 
   const mut = useMutation({
-    mutationFn: () => createSpace(form),
+    mutationFn: async () => {
+      const space = await createSpace(form);
+      if (schedules.length > 0) await setSchedules(space.id, schedules);
+      return space;
+    },
     onSuccess: () => {
       toast.success("Espacio creado correctamente");
       qc.invalidateQueries({ queryKey: ["my-spaces"] });
@@ -271,6 +283,11 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
             </div>
           )}
         </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-2">Horarios de disponibilidad</label>
+          <ScheduleEditor value={schedules} onChange={setSchedules2} />
+        </div>
       </div>
 
       <div className="flex justify-end gap-2 mt-5">
@@ -283,6 +300,155 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
           {mut.isPending ? "Creando…" : "Crear espacio"}
         </Button>
       </div>
+    </div>
+  );
+};
+
+// ── Editor de horarios ────────────────────────────────────────────────────────
+
+const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const DEFAULT_OPEN = "08:00";
+const DEFAULT_CLOSE = "20:00";
+
+interface ScheduleEditorProps {
+  value: Omit<Schedule, "id">[];
+  onChange: (s: Omit<Schedule, "id">[]) => void;
+}
+
+const ScheduleEditor = ({ value, onChange }: ScheduleEditorProps) => {
+  const activeSet = new Set(value.map((s) => s.day_of_week));
+
+  const toggle = (day: number) => {
+    if (activeSet.has(day)) {
+      onChange(value.filter((s) => s.day_of_week !== day));
+    } else {
+      onChange([...value, { day_of_week: day, open_time: DEFAULT_OPEN, close_time: DEFAULT_CLOSE }]);
+    }
+  };
+
+  const update = (day: number, field: "open_time" | "close_time", val: string) => {
+    onChange(value.map((s) => s.day_of_week === day ? { ...s, [field]: val } : s));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {DAY_NAMES.map((name, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => toggle(idx)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-smooth ${
+              activeSet.has(idx)
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-muted-foreground hover:bg-secondary/70"
+            }`}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+      {value.sort((a, b) => a.day_of_week - b.day_of_week).map((s) => (
+        <div key={s.day_of_week} className="flex items-center gap-2 text-sm">
+          <span className="w-8 text-muted-foreground font-medium">{DAY_NAMES[s.day_of_week]}</span>
+          <input
+            type="time"
+            value={s.open_time}
+            onChange={(e) => update(s.day_of_week, "open_time", e.target.value)}
+            className="px-2 py-1 rounded-lg border border-border bg-background text-sm"
+          />
+          <span className="text-muted-foreground">–</span>
+          <input
+            type="time"
+            value={s.close_time}
+            onChange={(e) => update(s.day_of_week, "close_time", e.target.value)}
+            className="px-2 py-1 rounded-lg border border-border bg-background text-sm"
+          />
+        </div>
+      ))}
+      {value.length === 0 && (
+        <p className="text-xs text-muted-foreground">Sin días configurados — el espacio no tendrá horario visible.</p>
+      )}
+    </div>
+  );
+};
+
+// ── Editor de imágenes ────────────────────────────────────────────────────────
+
+interface ImageEditorProps {
+  spaceId: string;
+  images: SpaceImage[];
+  onRefresh: () => void;
+}
+
+const ImageEditor = ({ spaceId, images, onRefresh }: ImageEditorProps) => {
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        await uploadSpaceImage(spaceId, file, images.length === 0);
+      }
+      onRefresh();
+    } catch {
+      toast.error("No se pudo subir la imagen");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDelete = async (imageId: string) => {
+    try {
+      await deleteSpaceImage(spaceId, imageId);
+      onRefresh();
+    } catch {
+      toast.error("No se pudo eliminar la imagen");
+    }
+  };
+
+  const handleSetPrimary = async (imageId: string) => {
+    try {
+      await setPrimaryImage(spaceId, imageId);
+      onRefresh();
+    } catch {
+      toast.error("No se pudo cambiar la imagen principal");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {images.map((img) => (
+          <div key={img.id} className="relative group w-24 h-24">
+            <img src={img.url} alt="" className="w-full h-full object-cover rounded-xl border border-border" />
+            {img.is_primary && (
+              <span className="absolute top-1 left-1 bg-primary rounded-full p-0.5">
+                <Star className="w-2.5 h-2.5 text-white fill-white" />
+              </span>
+            )}
+            <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+              {!img.is_primary && (
+                <button onClick={() => handleSetPrimary(img.id)} className="p-1 rounded-full bg-white/20 hover:bg-white/40" title="Principal">
+                  <Star className="w-3 h-3 text-white" />
+                </button>
+              )}
+              <button onClick={() => handleDelete(img.id)} className="p-1 rounded-full bg-white/20 hover:bg-red-500/80" title="Eliminar">
+                <Trash2 className="w-3 h-3 text-white" />
+              </button>
+            </div>
+          </div>
+        ))}
+        <label className={`w-24 h-24 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border cursor-pointer hover:border-primary/50 transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+          <ImagePlus className="w-5 h-5 text-muted-foreground mb-1" />
+          <span className="text-xs text-muted-foreground">{uploading ? "Subiendo…" : "Añadir"}</span>
+          <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">Hover sobre imagen para gestionar. La principal aparece en los listados.</p>
     </div>
   );
 };
@@ -302,9 +468,17 @@ const EditSpaceForm = ({ space, onClose }: { space: Space; onClose: () => void }
     amenities: [...space.amenities],
   });
   const [amenityInput, setAmenityInput] = useState("");
+  const [scheduleList, setScheduleList] = useState<Omit<Schedule, "id">[]>(
+    space.schedules.map(({ day_of_week, open_time, close_time }) => ({ day_of_week, open_time, close_time }))
+  );
+  const [localImages, setLocalImages] = useState<SpaceImage[]>(space.images);
 
   const mut = useMutation({
-    mutationFn: () => updateSpace(space.id, form),
+    mutationFn: async () => {
+      const updated = await updateSpace(space.id, form);
+      await setSchedules(space.id, scheduleList);
+      return updated;
+    },
     onSuccess: () => {
       toast.success("Espacio actualizado");
       qc.invalidateQueries({ queryKey: ["my-spaces"] });
@@ -325,6 +499,14 @@ const EditSpaceForm = ({ space, onClose }: { space: Space; onClose: () => void }
 
   const removeAmenity = (a: string) =>
     set("amenities", (form.amenities ?? []).filter((x) => x !== a));
+
+  const refreshImages = async () => {
+    try {
+      const { fetchSpace } = await import("@/lib/spaces");
+      const fresh = await fetchSpace(space.id);
+      setLocalImages(fresh.images);
+    } catch { /* silencioso */ }
+  };
 
   return (
     <div className="bg-card border border-primary/30 rounded-2xl p-6 mb-6 shadow-soft">
@@ -418,6 +600,16 @@ const EditSpaceForm = ({ space, onClose }: { space: Space; onClose: () => void }
               ))}
             </div>
           )}
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-2">Horarios de disponibilidad</label>
+          <ScheduleEditor value={scheduleList} onChange={setScheduleList} />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-2">Imágenes</label>
+          <ImageEditor spaceId={space.id} images={localImages} onRefresh={refreshImages} />
         </div>
       </div>
 
