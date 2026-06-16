@@ -246,7 +246,12 @@ const SpaceDetail = () => {
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-xs font-semibold mb-1">Inicio</label>
-                <select value={start} onChange={(e) => setStart(e.target.value)}
+                <select value={start} onChange={(e) => {
+                  const newStart = e.target.value;
+                  setStart(newStart);
+                  const validEnds = generateSlots().filter(t => t > newStart);
+                  if (validEnds.length > 0 && end <= newStart) setEnd(validEnds[0]);
+                }}
                   className="w-full px-3 py-2.5 rounded-xl border border-border bg-background">
                   {generateSlots().map((t) => <option key={t}>{t}</option>)}
                 </select>
