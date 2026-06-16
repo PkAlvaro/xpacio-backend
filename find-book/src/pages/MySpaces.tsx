@@ -167,15 +167,34 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
     { day_of_week: 3, open_time: "08:00", close_time: "20:00" },
     { day_of_week: 4, open_time: "08:00", close_time: "20:00" },
   ]);
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [stagedPreviews, setStagedPreviews] = useState<string[]>([]);
+
+  const addFiles = (files: FileList | null) => {
+    if (!files) return;
+    const valid = Array.from(files).filter((f) => f.type.startsWith("image/")).slice(0, 8 - stagedFiles.length);
+    setStagedFiles((prev) => [...prev, ...valid]);
+    setStagedPreviews((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
+  };
+
+  const removeStaged = (idx: number) => {
+    URL.revokeObjectURL(stagedPreviews[idx]);
+    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
+    setStagedPreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const mut = useMutation({
     mutationFn: async () => {
       const space = await createSpace(form);
       if (schedules.length > 0) await setSchedules(space.id, schedules);
+      for (let i = 0; i < stagedFiles.length; i++) {
+        await uploadSpaceImage(space.id, stagedFiles[i], i === 0);
+      }
       return space;
     },
     onSuccess: () => {
       toast.success("Espacio creado correctamente");
+      stagedPreviews.forEach((u) => URL.revokeObjectURL(u));
       qc.invalidateQueries({ queryKey: ["my-spaces"] });
       qc.invalidateQueries({ queryKey: ["spaces"] });
       onClose();
@@ -298,6 +317,38 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold mb-2">Horarios de disponibilidad</label>
           <ScheduleEditor value={schedules} onChange={setSchedules2} />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-semibold mb-2">
+            Imágenes <span className="text-muted-foreground font-normal">(máx. 8, la primera será la principal)</span>
+          </label>
+          <div className="flex flex-wrap gap-3">
+            {stagedPreviews.map((src, idx) => (
+              <div key={idx} className="relative w-24 h-24 rounded-xl overflow-hidden border border-border group">
+                <img src={src} alt="" className="w-full h-full object-cover" />
+                {idx === 0 && (
+                  <span className="absolute top-1 left-1 text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-medium">
+                    Principal
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeStaged(idx)}
+                  className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {stagedFiles.length < 8 && (
+              <label className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
+                <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground">Agregar</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+              </label>
+            )}
+          </div>
         </div>
       </div>
 
