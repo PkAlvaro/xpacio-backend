@@ -39,15 +39,6 @@ interface ApiReservation {
   status: "pending" | "confirmed" | "active" | "finished" | "cancelled" | "expired";
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: "Pendiente de pago",
-  confirmed: "Confirmada",
-  active: "En curso",
-  finished: "Finalizada",
-  cancelled: "Cancelada",
-  expired: "Expirada",
-};
-
 const MyReservations = () => {
   const { data: reservations = [], isLoading } = useMyReservations();
   const cancel = useCancelReservation();
