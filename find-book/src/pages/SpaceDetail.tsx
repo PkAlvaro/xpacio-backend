@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SpaceMap } from "@/components/SpaceMap";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useSpace, useAvailability, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
+import { useSpace, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
 import { SpaceCalendar } from "@/components/SpaceCalendar";
 import { SpaceCard } from "@/components/SpaceCard";
 import { useCreateReservation, useInitiatePayment } from "@/hooks/useReservations";
@@ -50,7 +50,6 @@ const SpaceDetail = () => {
   const [activeImg, setActiveImg] = useState(0);
   const [numPeopleStr, setNumPeopleStr] = useState("1");
 
-  const { data: slots } = useAvailability(id, date, 60);
   const { data: subSpaces } = useSubSpaces(id);
   const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
   const { data: reviewsData, isLoading: reviewsLoading } = useSpaceReviews(id);
@@ -298,11 +297,6 @@ const SpaceDetail = () => {
                 )}
               </div>
 
-              {slots && (
-                <p className={cn("text-xs mb-3", slotAvailable ? "text-success" : "text-destructive")}>
-                  {slotAvailable ? "✓ Horario disponible" : "✗ Horario no disponible"}
-                </p>
-              )}
 
               <Button variant="hero" size="lg" className="w-full" disabled={busy || !space.is_active} onClick={reserve}>
                 {busy ? "Procesando..." : space.is_active ? "Reservar ahora" : "No disponible"}
