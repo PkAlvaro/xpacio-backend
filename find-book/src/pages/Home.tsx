@@ -9,9 +9,8 @@ import { useSpaces } from "@/hooks/useSpaces";
 import { useMe } from "@/hooks/useAuth";
 
 const Home = () => {
-  const { data, isLoading } = useSpaces({ city: "Santiago", page_size: 6 });
+  const { data, isLoading } = useSpaces({ page_size: 6 });
   const featured = data?.items ?? [];
-  const active = useSpaces({ page_size: 12 });
   const { data: user } = useMe();
   const publishHref = user?.role === "admin" ? "/admin/espacios/nuevo" : "/registro";
   return (
@@ -89,19 +88,6 @@ const Home = () => {
             : featured.map((s, i) => <SpaceCard key={s.id} space={s} index={i} />)}
         </div>
 
-        {active.isLoading ? (
-          <div className="text-center py-20 text-muted-foreground">Cargando espacios…</div>
-        ) : active.isError ? (
-          <div className="text-center py-20 text-muted-foreground">No se pudieron cargar los espacios. ¿Está el backend en línea?</div>
-        ) : active.data && active.data.length > 0 ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-8">
-            {active.data.map((s, i) => <SpaceCard key={s.id} space={s} index={i} />)}
-          </div>
-        ) : (
-          <div className="text-center py-20 text-muted-foreground">
-            Todavía no hay espacios publicados.
-          </div>
-        )}
       </section>
 
       {/* CTA */}
