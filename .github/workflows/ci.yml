@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: xpacio_test
+          POSTGRES_USER: xpacio
+          POSTGRES_PASSWORD: testpassword
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 6379:6379
+
+    env:
+      ENV: test
+      SECRET_KEY: ci-test-secret-key-64-chars-minimo-para-que-funcione-el-jwt-ok
+      DATABASE_URL: postgresql+asyncpg://xpacio:testpassword@localhost:5432/xpacio_test
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_PASSWORD: ""
+      MINIO_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: xpacio-test
+      MINIO_USE_SSL: "false"
+      FRONTEND_URL: http://localhost:5173
+      STRIPE_SECRET_KEY: sk_test_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_placeholder
+      STRIPE_SUCCESS_URL: http://localhost:5173/reserva/confirmacion
+      STRIPE_CANCEL_URL: http://localhost:5173/reserva/cancelada
+      TRANSBANK_COMMERCE_CODE: "597055555532"
+      TRANSBANK_API_KEY: placeholder
+      TRANSBANK_ENV: integration
+      TRANSBANK_RETURN_URL: http://localhost:5173/reserva/confirmacion
+      GOOGLE_MAPS_API_KEY: ""
+      FROM_EMAIL: test@xpacio.cl
+      RESEND_API_KEY: ""
+      GOOGLE_SERVICE_ACCOUNT_JSON: "{}"
+      GOOGLE_CALENDAR_ID: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=40
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check app/ --select E,F,W --ignore E501
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: find-book
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: find-book/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_URL: /api/v1
+          VITE_GOOGLE_MAPS_API_KEY: ""
