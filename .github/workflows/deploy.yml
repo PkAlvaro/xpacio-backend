@@ -30,6 +30,9 @@ jobs:
             echo "=== Build services ==="
             docker compose -f docker-compose.prod.yml --env-file .env.prod build frontend api worker beat
 
+            echo "=== Run migrations ==="
+            docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm api alembic upgrade head
+
             echo "=== Rolling restart ==="
             docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend api worker beat
 
