@@ -1,15 +1,14 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, MapPin, Star, Users, Check, Calendar as CalIcon, DoorOpen } from "lucide-react";
+import { ArrowLeft, MapPin, Star, Users, Check, DoorOpen, Calendar as CalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpaceMap } from "@/components/SpaceMap";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useSpace, useAvailability, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
+import { useSpace, useSubSpaces, useSimilarSpaces } from "@/hooks/useSpaces";
 import { SpaceCard } from "@/components/SpaceCard";
-import { TimeGrid } from "@/components/TimeGrid";
+import { SpaceCalendar } from "@/components/SpaceCalendar";
 import { useCreateReservation, useInitiatePayment } from "@/hooks/useReservations";
 import { useMe } from "@/hooks/useAuth";
 import { useSpaceReviews } from "@/hooks/useReviews";
@@ -29,16 +28,12 @@ const SpaceDetail = () => {
   const { data: user } = useMe();
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("12:00");
   const [activeImg, setActiveImg] = useState(0);
   const [numPeopleStr, setNumPeopleStr] = useState("1");
 
-  const { data: slots } = useAvailability(id, date, 30);
-  const unavailableSet = useMemo(
-    () => new Set((slots ?? []).filter((s) => !s.available).map((s) => s.start)),
-    [slots],
-  );
   const { data: subSpaces } = useSubSpaces(id);
   const { data: similar = [], isLoading: similarLoading } = useSimilarSpaces(id);
   const { data: reviewsData, isLoading: reviewsLoading } = useSpaceReviews(id);
@@ -72,7 +67,11 @@ const SpaceDetail = () => {
   const subtotalBase = hours * space.price_per_hour;
   const total = hours * effectivePrice;
 
-  const slotAvailable = slots?.find(s => s.start === start)?.available ?? true;
+  // Multi-día: calcular días entre date y endDate
+  const dayCount = Math.max(1, Math.round(
+    (new Date(endDate).getTime() - new Date(date).getTime()) / 86_400_000
+  ) + 1);
+  const multiDay = endDate > date;
 
   const reserve = async () => {
     if (!user) {
@@ -80,8 +79,7 @@ const SpaceDetail = () => {
       navigate("/login");
       return;
     }
-    if (hours <= 0) return toast.error("El horario de fin debe ser posterior al inicio");
-    if (!slotAvailable) return toast.error("El horario seleccionado no está disponible");
+    if (hours <= 0) return toast.error("Selecciona un horario en el calendario");
 
     try {
       const reservation = await createReservation.mutateAsync({
@@ -133,6 +131,27 @@ const SpaceDetail = () => {
           ))}
         </div>
       </div>
+
+      {/* Calendario de disponibilidad — área principal */}
+      <section className="mb-10">
+        <h2 className="font-display text-2xl font-semibold mb-4 flex items-center gap-2">
+          <CalIcon className="w-5 h-5" /> Selecciona fecha y horario
+        </h2>
+        <SpaceCalendar
+          spaceId={id!}
+          schedules={space.schedules ?? []}
+          onSelect={(sd, st, ed, et) => {
+            setDate(sd);
+            setStart(st);
+            setEndDate(ed);
+            setEnd(et);
+          }}
+          selectedDate={date}
+          selectedEndDate={endDate}
+          selectedStart={start}
+          selectedEnd={end}
+        />
+      </section>
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-8">
         <div className="space-y-10 min-w-0">
@@ -238,21 +257,30 @@ const SpaceDetail = () => {
               <span className="text-muted-foreground">/ hora</span>
             </div>
 
-            <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
-              <CalIcon className="w-3 h-3" /> Fecha
-            </label>
-            <input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-background mb-3" />
-
-            <div className="mb-3">
-              <label className="block text-xs font-semibold mb-1.5">Horario</label>
-              <TimeGrid
-                start={start}
-                end={end}
-                onChange={(s, e) => { setStart(s); setEnd(e); }}
-                unavailable={unavailableSet}
-              />
-            </div>
+            {hours > 0 ? (
+              <div className="mb-4 p-3 rounded-xl bg-secondary/60 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Fecha</span>
+                  <span className="font-medium">
+                    {multiDay ? `${date} → ${endDate}` : date}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Horario</span>
+                  <span className="font-medium">{start} – {end}</span>
+                </div>
+                {multiDay && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Días</span>
+                    <span className="font-medium">{dayCount}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="mb-4 text-sm text-muted-foreground text-center py-3 rounded-xl bg-secondary/40">
+                Arrastra en el calendario para seleccionar horario
+              </p>
+            )}
 
             <div className="mb-5">
               <label className="block text-xs font-semibold mb-1">Número de personas</label>

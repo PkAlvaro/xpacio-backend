@@ -53,6 +53,24 @@ export function useSimilarSpaces(spaceId: string | undefined, limit = 4) {
   });
 }
 
+export function useSpaceCalendar(
+  spaceId: string | undefined,
+  start: string,
+  end: string,
+) {
+  return useQuery({
+    queryKey: ["space-calendar", spaceId, start, end],
+    queryFn: async () => {
+      const res = await apiRequest<ApiResponse<object[]>>(
+        `/spaces/${spaceId}/calendar?start=${start}&end=${end}`
+      );
+      return res.data ?? [];
+    },
+    enabled: !!spaceId && !!start && !!end,
+    staleTime: 30_000,
+  });
+}
+
 export function useAvailability(
   spaceId: string | undefined,
   date: string | undefined,
