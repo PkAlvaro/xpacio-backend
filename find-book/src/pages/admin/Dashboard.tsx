@@ -220,7 +220,44 @@ export default function Dashboard() {
               <HealthBadge status={health ? "ok" : undefined} />
             </div>
           </div>
+
+          {health?.metrics && Object.keys(health.metrics).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Métricas del servidor</p>
+              {health.metrics.cpu_percent !== undefined && (
+                <MetricBar label="CPU" percent={health.metrics.cpu_percent} />
+              )}
+              {health.metrics.memory_percent !== undefined && (
+                <MetricBar
+                  label={`Memoria ${health.metrics.memory_used_mb ? Math.round(health.metrics.memory_used_mb) + " MB" : ""}`}
+                  percent={health.metrics.memory_percent}
+                />
+              )}
+              {health.metrics.disk_percent !== undefined && (
+                <MetricBar
+                  label={`Disco ${health.metrics.disk_used_gb ? health.metrics.disk_used_gb + " GB" : ""}`}
+                  percent={health.metrics.disk_percent}
+                  warn={80}
+                />
+              )}
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricBar({ label, percent, warn = 90 }: { label: string; percent: number; warn?: number }) {
+  const color = percent >= warn ? "bg-red-500" : percent >= warn - 20 ? "bg-yellow-500" : "bg-green-500";
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+        <span>{label}</span>
+        <span className="font-mono">{percent.toFixed(1)}%</span>
+      </div>
+      <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(percent, 100)}%` }} />
       </div>
     </div>
   );

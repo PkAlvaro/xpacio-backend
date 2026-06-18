@@ -32,6 +32,7 @@ const AdminUsers = lazy(() => import("./pages/admin/Users"));
 const AdminReservations = lazy(() => import("./pages/admin/Reservations"));
 const AdminDisputes = lazy(() => import("./pages/admin/Disputes"));
 const AdminSettings = lazy(() => import("./pages/admin/Settings"));
+const AdminLogs = lazy(() => import("./pages/admin/Logs"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +77,7 @@ const App = () => (
                 <Route path="reservaciones" element={<AdminReservations />} />
                 <Route path="reclamaciones" element={<AdminDisputes />} />
                 <Route path="usuarios" element={<AdminUsers />} />
+                <Route path="actividad" element={<AdminLogs />} />
                 <Route path="configuracion" element={<AdminSettings />} />
               </Route>
               <Route path="*" element={<NotFound />} />

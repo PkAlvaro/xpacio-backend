@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Search, ShieldCheck, UserCheck, UserX } from "lucide-react";
+import { Search, ShieldCheck, UserCheck, UserX, StickyNote, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAdminUsers, useChangeRole, useToggleUserStatus } from "@/hooks/useAdmin";
+import { useAdminUsers, useChangeRole, useToggleUserStatus, useUserNotes, useAddUserNote, useDeleteUserNote } from "@/hooks/useAdmin";
 import { useDebounce } from "@/hooks/useDebounce";
 import type { AdminUserListItem } from "@/types/api";
 
@@ -24,6 +24,7 @@ const ROLES_CYCLE: string[] = ["client", "provider", "admin"];
 export default function Users() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [expandedNotes, setExpandedNotes] = useState<string | null>(null);
   const debouncedQ = useDebounce(q, 350);
 
   const { data, isLoading } = useAdminUsers({ page, page_size: 20, q: debouncedQ || undefined });
@@ -81,65 +82,83 @@ export default function Users() {
             </thead>
             <tbody>
               {users.map(u => (
-                <tr key={u.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-smooth">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 grid place-items-center shrink-0">
-                        <span className="text-xs font-bold text-primary">{u.name[0].toUpperCase()}</span>
+                <>
+                  <tr key={u.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-smooth">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 grid place-items-center shrink-0">
+                          <span className="text-xs font-bold text-primary">{u.name[0].toUpperCase()}</span>
+                        </div>
+                        <p className="font-medium">{u.name}</p>
                       </div>
-                      <p className="font-medium">{u.name}</p>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{u.email}</td>
-                  <td className="py-3 px-4">
-                    <select
-                      value={u.role}
-                      onChange={e => handleRoleChange(u, e.target.value)}
-                      disabled={changeRole.isPending}
-                      className={cn(
-                        "text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer outline-none",
-                        ROLE_COLORS[u.role] ?? "bg-secondary text-muted-foreground"
-                      )}
-                    >
-                      {ROLES_CYCLE.map(r => (
-                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={cn(
-                      "inline-flex text-xs font-medium px-2.5 py-1 rounded-full",
-                      u.is_active ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
-                    )}>
-                      {u.is_active ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-1 justify-end">
-                      {u.role === "admin" && (
-                        <ShieldCheck className="w-4 h-4 text-primary mr-1" title="Administrador" />
-                      )}
-                      <button
-                        onClick={() => handleStatusToggle(u)}
-                        title={u.is_active ? "Desactivar" : "Activar"}
-                        disabled={toggleStatus.isPending}
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{u.email}</td>
+                    <td className="py-3 px-4">
+                      <select
+                        value={u.role}
+                        onChange={e => handleRoleChange(u, e.target.value)}
+                        disabled={changeRole.isPending}
                         className={cn(
-                          "p-2 rounded-lg transition-smooth disabled:opacity-50",
-                          u.is_active
-                            ? "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                            : "hover:bg-success/10 text-muted-foreground hover:text-success"
+                          "text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer outline-none",
+                          ROLE_COLORS[u.role] ?? "bg-secondary text-muted-foreground"
                         )}
                       >
-                        {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                        {ROLES_CYCLE.map(r => (
+                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={cn(
+                        "inline-flex text-xs font-medium px-2.5 py-1 rounded-full",
+                        u.is_active ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                      )}>
+                        {u.is_active ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1 justify-end">
+                        {u.role === "admin" && (
+                          <ShieldCheck className="w-4 h-4 text-primary mr-1" title="Administrador" />
+                        )}
+                        <button
+                          onClick={() => setExpandedNotes(expandedNotes === u.id ? null : u.id)}
+                          title="Notas internas"
+                          className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-smooth"
+                        >
+                          {expandedNotes === u.id ? <ChevronUp className="w-4 h-4" /> : <StickyNote className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleStatusToggle(u)}
+                          title={u.is_active ? "Desactivar" : "Activar"}
+                          disabled={toggleStatus.isPending}
+                          className={cn(
+                            "p-2 rounded-lg transition-smooth disabled:opacity-50",
+                            u.is_active
+                              ? "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              : "hover:bg-success/10 text-muted-foreground hover:text-success"
+                          )}
+                        >
+                          {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedNotes === u.id && (
+                    <tr key={`notes-${u.id}`} className="border-b border-border bg-secondary/20">
+                      <td colSpan={5} className="px-4 py-4">
+                        <UserNotesPanel userId={u.id} />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Notas panel — rendered outside table to avoid layout issues */}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 mt-5">
@@ -148,6 +167,64 @@ export default function Users() {
           <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function UserNotesPanel({ userId }: { userId: string }) {
+  const [newNote, setNewNote] = useState("");
+  const { data: notes = [], isLoading } = useUserNotes(userId);
+  const addNote = useAddUserNote();
+  const deleteNote = useDeleteUserNote();
+
+  const handleAdd = async () => {
+    if (newNote.trim().length < 3) return;
+    await addNote.mutateAsync({ userId, body: newNote.trim() });
+    setNewNote("");
+    toast.success("Nota guardada");
+  };
+
+  return (
+    <div className="max-w-xl space-y-3">
+      <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+        <StickyNote className="w-3.5 h-3.5" /> Notas internas
+      </p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Cargando…</p>
+      ) : notes.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Sin notas.</p>
+      ) : (
+        <div className="space-y-2">
+          {notes.map(n => (
+            <div key={n.id} className="flex items-start gap-2 bg-card border border-border rounded-xl px-3 py-2">
+              <p className="text-sm flex-1">{n.body}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {new Date(n.created_at).toLocaleDateString("es-CL", { day: "2-digit", month: "short" })}
+                </span>
+                <button
+                  onClick={() => deleteNote.mutateAsync({ userId, noteId: n.id })}
+                  className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-smooth"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          value={newNote}
+          onChange={e => setNewNote(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleAdd(); }}
+          placeholder="Agregar nota interna…"
+          className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 ring-primary/20"
+        />
+        <Button size="sm" variant="hero" disabled={newNote.trim().length < 3 || addNote.isPending} onClick={handleAdd}>
+          Guardar
+        </Button>
+      </div>
     </div>
   );
 }

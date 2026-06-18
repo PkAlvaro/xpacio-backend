@@ -38,6 +38,14 @@ export function useOpenDispute() {
   });
 }
 
+export function useProviderDisputes() {
+  return useQuery({
+    queryKey: ["provider", "disputes"],
+    queryFn: () => apiRequest<ApiResponse<DisputeItem[]>>("/provider/disputes").then(r => r.data ?? []),
+    staleTime: 30_000,
+  });
+}
+
 export function useAdminDisputes(params: { status?: string; page?: number; page_size?: number } = {}) {
   const qs = new URLSearchParams();
   if (params.status) qs.set("status", params.status);

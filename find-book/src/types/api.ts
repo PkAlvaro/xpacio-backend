@@ -222,10 +222,23 @@ export interface SystemConfig {
   maintenance_mode: boolean;
 }
 
+export interface HealthMetrics {
+  cpu_percent?: number;
+  memory_used_mb?: number;
+  memory_total_mb?: number;
+  memory_percent?: number;
+  disk_used_gb?: number;
+  disk_total_gb?: number;
+  disk_percent?: number;
+}
+
 export interface HealthStatus {
   status: "healthy" | "degraded";
   checks: Record<string, "ok" | "fail">;
+  metrics?: HealthMetrics;
 }
+
+export type SpaceApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface AdminSpaceListItem {
   id: string;
@@ -242,6 +255,8 @@ export interface AdminSpaceListItem {
   parent_id?: string;
   primary_image?: string;
   provider_name?: string;
+  approval_status?: SpaceApprovalStatus;
+  approval_note?: string | null;
   created_at: string;
 }
 
@@ -332,6 +347,24 @@ export interface DisputeItem {
   resolved_at: string | null;
   resolved_by: string | null;
   evidence: DisputeEvidence[];
+  created_at: string;
+}
+
+export interface UserNote {
+  id: string;
+  body: string;
+  admin_id: string | null;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  admin_id: string | null;
+  admin_name: string | null;
   created_at: string;
 }
 

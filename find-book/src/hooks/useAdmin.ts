@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAccessToken } from "@/lib/api";
-import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, AdminReservationItem, SpaceImage, SystemConfig, HealthStatus } from "@/types/api";
+import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, AdminReservationItem, SpaceImage, SystemConfig, HealthStatus, UserNote, AuditLog } from "@/types/api";
 
 // ── Stats ──────────────────────────────────────────────────────────────────
 export function useAdminStats() {
@@ -192,6 +192,71 @@ export function useSystemConfig() {
     queryKey: ["admin", "config"],
     queryFn: () => apiRequest<ApiResponse<SystemConfig>>("/admin/config").then(r => r.data),
     staleTime: 60_000,
+  });
+}
+
+// ── User notes ─────────────────────────────────────────────────────────────
+
+export function useUserNotes(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["admin", "user-notes", userId],
+    queryFn: () => apiRequest<ApiResponse<UserNote[]>>(`/admin/users/${userId}/notes`).then(r => r.data ?? []),
+    enabled: !!userId,
+    staleTime: 15_000,
+  });
+}
+
+export function useAddUserNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, body }: { userId: string; body: string }) =>
+      apiRequest(`/admin/users/${userId}/notes`, { method: "POST", body: JSON.stringify({ body }) }),
+    onSuccess: (_, { userId }) => qc.invalidateQueries({ queryKey: ["admin", "user-notes", userId] }),
+  });
+}
+
+export function useDeleteUserNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, noteId }: { userId: string; noteId: string }) =>
+      apiRequest(`/admin/users/${userId}/notes/${noteId}`, { method: "DELETE" }),
+    onSuccess: (_, { userId }) => qc.invalidateQueries({ queryKey: ["admin", "user-notes", userId] }),
+  });
+}
+
+// ── Audit logs ─────────────────────────────────────────────────────────────
+
+export function useAuditLogs(params: { action?: string; target_type?: string; admin_user_id?: string; page?: number; page_size?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.action) qs.set("action", params.action);
+  if (params.target_type) qs.set("target_type", params.target_type);
+  if (params.admin_user_id) qs.set("admin_user_id", params.admin_user_id);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  return useQuery({
+    queryKey: ["admin", "audit-logs", params],
+    queryFn: () => apiRequest<ApiResponse<AuditLog[]>>(`/admin/audit-logs?${qs}`).then(r => ({ items: r.data ?? [], meta: r.meta })),
+    staleTime: 15_000,
+  });
+}
+
+// ── Space approval ─────────────────────────────────────────────────────────
+
+export function useApproveSpace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (spaceId: string) =>
+      apiRequest(`/admin/spaces/${spaceId}/approve`, { method: "PATCH" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "spaces"] }),
+  });
+}
+
+export function useRejectSpace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, note }: { spaceId: string; note?: string }) =>
+      apiRequest(`/admin/spaces/${spaceId}/reject`, { method: "PATCH", body: JSON.stringify({ note: note ?? null }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "spaces"] }),
   });
 }
 

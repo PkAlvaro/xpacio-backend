@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck, Ban, Pencil, Images } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Ban, Pencil, Images, AlertCircle } from "lucide-react";
 import {
   fetchMySpaces, updateSpaceOffer, fetchIncomingReservations,
   providerCancelReservation,
@@ -9,6 +9,8 @@ import {
 } from "@/lib/spaces";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
+import { useProviderDisputes } from "@/hooks/useDisputes";
+import type { DisputeItem } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { ImageOrderManager } from "@/components/ImageOrderManager";
@@ -36,7 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const MySpaces = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"spaces" | "reservations">("spaces");
+  const [tab, setTab] = useState<"spaces" | "reservations" | "disputes">("spaces");
   const [reservationStatus, setReservationStatus] = useState<string | undefined>(undefined);
   const { data: me, isLoading: meLoading } = useMe();
 
@@ -61,6 +63,8 @@ const MySpaces = () => {
     queryFn: () => fetchIncomingReservations(reservationStatus),
     enabled: !!me && tab === "reservations",
   });
+
+  const { data: disputes = [], isLoading: loadingDisputes } = useProviderDisputes();
 
   const qc = useQueryClient();
   const cancelMut = useMutation({
@@ -102,6 +106,19 @@ const MySpaces = () => {
         >
           <CalendarCheck className="w-3.5 h-3.5" /> Reservas recibidas
         </button>
+        <button
+          onClick={() => setTab("disputes")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-smooth -mb-px flex items-center gap-1.5 ${
+            tab === "disputes" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <AlertCircle className="w-3.5 h-3.5" /> Reclamaciones
+          {disputes.filter(d => d.status === "open").length > 0 && (
+            <span className="bg-destructive text-destructive-foreground text-xs px-1.5 py-0.5 rounded-full">
+              {disputes.filter(d => d.status === "open").length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Mis espacios */}
@@ -119,6 +136,23 @@ const MySpaces = () => {
           ) : (
             <div className="space-y-5">
               {spaces.map((s) => <SpaceOfferCard key={s.id} space={s} />)}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Reclamaciones */}
+      {tab === "disputes" && (
+        <>
+          {loadingDisputes ? (
+            <div className="text-center py-20 text-muted-foreground">Cargando…</div>
+          ) : disputes.length === 0 ? (
+            <div className="text-center py-20 border border-dashed border-border rounded-2xl">
+              <p className="text-muted-foreground">No hay reclamaciones sobre tus espacios.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {disputes.map((d) => <ProviderDisputeCard key={d.id} dispute={d} />)}
             </div>
           )}
         </>
@@ -372,6 +406,83 @@ const IncomingReservationCard = ({
           </button>
         )}
       </div>
+    </div>
+  );
+};
+
+// ── Card reclamación (vista anfitrión) ───────────────────────────────────────
+
+const DISPUTE_STATUS_LABELS: Record<string, string> = {
+  open: "Abierta",
+  resolved_refund: "Reembolso",
+  resolved_rejected: "Rechazada",
+};
+
+const DISPUTE_STATUS_COLORS: Record<string, string> = {
+  open: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+  resolved_refund: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  resolved_rejected: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+};
+
+const ProviderDisputeCard = ({ dispute: d }: { dispute: DisputeItem }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5 shadow-soft">
+      <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
+        <div className="flex-1 space-y-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold truncate">{d.space_name ?? "Espacio"}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${DISPUTE_STATUS_COLORS[d.status] ?? "bg-muted text-muted-foreground"}`}>
+              {DISPUTE_STATUS_LABELS[d.status] ?? d.status}
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {d.opener_name ?? "Cliente"} — {d.opener_email}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {new Date(d.created_at).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" })}
+          </p>
+        </div>
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="text-xs text-primary underline underline-offset-2 shrink-0"
+        >
+          {open ? "Ocultar" : "Ver detalle"}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Motivo</p>
+            <p className="text-sm">{d.reason}</p>
+          </div>
+          {d.evidence.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Evidencia ({d.evidence.length})</p>
+              <div className="flex flex-wrap gap-2">
+                {d.evidence.map(e => (
+                  <a key={e.id} href={e.url} target="_blank" rel="noreferrer">
+                    <img src={e.url} alt={e.filename ?? "evidencia"} className="w-20 h-20 object-cover rounded-xl border border-border" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {d.admin_notes && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Resolución del administrador</p>
+              <p className="text-sm">{d.admin_notes}</p>
+            </div>
+          )}
+          {d.refund_amount != null && (
+            <p className="text-sm">
+              Reembolso: <span className="font-semibold">{d.refund_amount.toLocaleString("es-CL", { style: "currency", currency: "CLP" })}</span>
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
