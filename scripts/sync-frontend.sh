@@ -3,7 +3,9 @@
 # Install as hook: ln -sf ../../backend/scripts/sync-frontend.sh .git/hooks/post-commit
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlink so this works when called as a git hook
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 BACKEND_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FRONTEND_ROOT="$(cd "$BACKEND_ROOT/../find-book" && pwd)"
 
