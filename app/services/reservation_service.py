@@ -250,25 +250,24 @@ async def list_incoming_reservations(
     provider_user_id: uuid.UUID,
     session: AsyncSession,
     status: ReservationStatus | None = None,
+    page: int = 1,
+    page_size: int = 50,
 ) -> list[dict]:
     from app.models.provider import Provider
     from app.models.space import Space
     from app.models.user import User
 
-    prov_result = await session.execute(select(Provider).where(Provider.user_id == provider_user_id))
-    provider = prov_result.scalar_one_or_none()
-    if not provider:
-        return []
+    provider_subq = select(Provider.id).where(Provider.user_id == provider_user_id).scalar_subquery()
 
     query = (
         select(Reservation, Space.name.label("space_name"), User.name.label("client_name"), User.email.label("client_email"))
         .join(Space, Reservation.space_id == Space.id)
         .join(User, Reservation.client_id == User.id)
-        .where(Space.provider_id == provider.id)
+        .where(Space.provider_id == provider_subq)
     )
     if status:
         query = query.where(Reservation.status == status)
-    query = query.order_by(Reservation.date.desc())
+    query = query.order_by(Reservation.date.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await session.execute(query)
     rows = result.all()
     out = []

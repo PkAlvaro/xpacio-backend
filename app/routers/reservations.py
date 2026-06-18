@@ -127,11 +127,13 @@ Se puede filtrar por estado con el parámetro `status`.
 )
 async def list_incoming_reservations(
     status: str | None = Query(default=None, description="Filtrar por estado"),
+    page: int = Query(default=1, ge=1, description="Página"),
+    page_size: int = Query(default=50, ge=1, le=200, description="Resultados por página"),
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
 ):
     status_enum = ReservationStatus(status) if status else None
-    items = await reservation_service.list_incoming_reservations(user.id, session, status_enum)
+    items = await reservation_service.list_incoming_reservations(user.id, session, status_enum, page, page_size)
     return {"success": True, "data": [IncomingReservationResponse.model_validate(r).model_dump() for r in items]}
 
 

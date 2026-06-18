@@ -407,14 +407,11 @@ async def set_schedules(
 
 
 async def list_provider_spaces(user_id: uuid.UUID, session: AsyncSession) -> list[Space]:
-    result = await session.execute(select(Provider).where(Provider.user_id == user_id))
-    provider = result.scalar_one_or_none()
-    if not provider:
-        return []
+    provider_subq = select(Provider.id).where(Provider.user_id == user_id).scalar_subquery()
     spaces_result = await session.execute(
         select(Space)
         .options(selectinload(Space.images), selectinload(Space.schedules), selectinload(Space.amenities))
-        .where(Space.provider_id == provider.id)
+        .where(Space.provider_id == provider_subq)
         .order_by(Space.created_at.desc())
     )
     return spaces_result.scalars().all()
