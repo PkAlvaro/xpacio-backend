@@ -147,8 +147,8 @@ export async function fetchSimilarSpaces(id: string): Promise<Space[]> {
 }
 
 export async function fetchMySpaces(): Promise<Space[]> {
-  const data = await apiRequest<ApiSpace[]>("/spaces/mine");
-  return (data || []).map(mapSpace);
+  const res = await apiRequest<{ success: boolean; data: ApiSpace[] }>("/spaces/mine");
+  return (res.data || []).map(mapSpace);
 }
 
 export interface AvailabilitySlot {
