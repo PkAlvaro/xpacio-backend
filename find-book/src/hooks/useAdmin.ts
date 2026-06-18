@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAccessToken } from "@/lib/api";
-import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, AdminReservationItem, SpaceImage } from "@/types/api";
+import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, AdminReservationItem, SpaceImage, SystemConfig, HealthStatus } from "@/types/api";
 
 // ── Stats ──────────────────────────────────────────────────────────────────
 export function useAdminStats() {
@@ -166,5 +166,31 @@ export function useAdminCancelReservation() {
       qc.invalidateQueries({ queryKey: ["admin", "reservations"] });
       qc.invalidateQueries({ queryKey: ["admin", "stats"] });
     },
+  });
+}
+
+export function useAdminHealth() {
+  return useQuery({
+    queryKey: ["admin", "health"],
+    queryFn: () => apiRequest<ApiResponse<HealthStatus>>("/admin/health").then(r => r.data),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSystemConfig() {
+  return useQuery({
+    queryKey: ["admin", "config"],
+    queryFn: () => apiRequest<ApiResponse<SystemConfig>>("/admin/config").then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateSystemConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<SystemConfig>) =>
+      apiRequest<ApiResponse<SystemConfig>>("/admin/config", { method: "PATCH", body: JSON.stringify(data) }).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "config"] }),
   });
 }

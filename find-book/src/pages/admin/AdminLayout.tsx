@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Building2, Users, CalendarCheck, AlertTriangle, LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CalendarCheck, AlertTriangle, Settings, LogOut, ChevronRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useMe } from "@/hooks/useAuth";
@@ -11,6 +11,7 @@ const NAV = [
   { to: "/admin/reservaciones", label: "Reservaciones", icon: CalendarCheck },
   { to: "/admin/reclamaciones", label: "Reclamaciones", icon: AlertTriangle },
   { to: "/admin/usuarios", label: "Usuarios", icon: Users },
+  { to: "/admin/configuracion", label: "Configuración", icon: Settings },
 ];
 
 export default function AdminLayout() {

@@ -193,11 +193,32 @@ export interface ReviewCreate {
 
 // --- Admin ---
 
+export interface DailyReservation {
+  date: string;
+  reservations: number;
+}
+
 export interface AdminStats {
   total_spaces: number;
   active_spaces: number;
   total_users: number;
   total_reservations: number;
+  total_revenue: number;
+  revenue_30d: number;
+  pending_disputes: number;
+  daily_reservations: DailyReservation[];
+}
+
+export interface SystemConfig {
+  platform_fee_percent: number;
+  dispute_window_days: number;
+  pending_reservation_ttl_minutes: number;
+  maintenance_mode: boolean;
+}
+
+export interface HealthStatus {
+  status: "healthy" | "degraded";
+  checks: Record<string, "ok" | "fail">;
 }
 
 export interface AdminSpaceListItem {
