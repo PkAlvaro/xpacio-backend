@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck, Ban, Pencil } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Ban, Pencil, Images } from "lucide-react";
 import {
   fetchMySpaces, updateSpaceOffer, fetchIncomingReservations,
   providerCancelReservation,
@@ -11,6 +11,14 @@ import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { ImageOrderManager } from "@/components/ImageOrderManager";
+import {
+  useProviderSpace,
+  useProviderUploadImage,
+  useProviderDeleteImage,
+  useProviderSetPrimaryImage,
+  useProviderReorderImages,
+} from "@/hooks/useProviderSpace";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -164,11 +172,14 @@ const MySpaces = () => {
   );
 };
 
-// ── Card gestión de oferta ────────────────────────────────────────────────────
+// ── Card gestión de espacio ───────────────────────────────────────────────────
 
 const SpaceOfferCard = ({ space }: { space: Space }) => {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [cardTab, setCardTab] = useState<"oferta" | "imagenes">("oferta");
+
+  // Oferta state
   const [active, setActive] = useState(space.discountActive);
   const [type, setType] = useState<DiscountType>(space.discountType || "percentage");
   const [value, setValue] = useState<number>(space.discountValue || 10);
@@ -192,21 +203,52 @@ const SpaceOfferCard = ({ space }: { space: Space }) => {
 
   const preview = active && value ? Math.round(space.price * (1 - value / 100)) : space.price;
 
-  return (
-    <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col md:flex-row gap-4">
-      <img src={space.image} alt={space.name} className="w-full md:w-40 h-32 object-cover rounded-xl" />
-      <div className="flex-1">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="font-semibold">{space.name}</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/mis-espacios/${space.id}/editar`)}>
-              <Pencil className="w-3.5 h-3.5" /> Editar
-            </Button>
-          </div>
-        </div>
+  // Imágenes
+  const { data: spaceDetail } = useProviderSpace(cardTab === "imagenes" ? space.id : undefined);
+  const uploadImage = useProviderUploadImage();
+  const deleteImage = useProviderDeleteImage();
+  const setPrimary = useProviderSetPrimaryImage();
+  const reorderImages = useProviderReorderImages();
+  const images = spaceDetail?.images ?? [];
 
-        <div className="mt-4 space-y-3">
+  return (
+    <div className="bg-card border border-border rounded-2xl shadow-soft overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 border-b border-border">
+        <img src={space.image} alt={space.name} className="w-14 h-14 object-cover rounded-xl shrink-0" />
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold truncate">{space.name}</h3>
+          <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => navigate(`/mis-espacios/${space.id}/editar`)}>
+          <Pencil className="w-3.5 h-3.5" /> Editar
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-border px-4">
+        <button
+          onClick={() => setCardTab("oferta")}
+          className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-smooth flex items-center gap-1.5 ${
+            cardTab === "oferta" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}>
+          <Tag className="w-3 h-3" /> Oferta
+        </button>
+        <button
+          onClick={() => setCardTab("imagenes")}
+          className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-smooth flex items-center gap-1.5 ${
+            cardTab === "imagenes" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}>
+          <Images className="w-3 h-3" /> Imágenes
+          {images.length > 0 && (
+            <span className="bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full">{images.length}</span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab: Oferta */}
+      {cardTab === "oferta" && (
+        <div className="p-4 space-y-3">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)}
               className="w-4 h-4 rounded accent-primary" />
@@ -256,7 +298,25 @@ const SpaceOfferCard = ({ space }: { space: Space }) => {
             </Button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Tab: Imágenes */}
+      {cardTab === "imagenes" && (
+        <div className="p-4">
+          <ImageOrderManager
+            spaceId={space.id}
+            images={images}
+            uploading={uploadImage.isPending}
+            onUpload={async (files) => {
+              for (const file of files) await uploadImage.mutateAsync({ spaceId: space.id, file });
+              toast.success(`${files.length} imagen${files.length > 1 ? "es" : ""} subida${files.length > 1 ? "s" : ""}`);
+            }}
+            onDelete={(imageId) => deleteImage.mutateAsync({ spaceId: space.id, imageId })}
+            onSetPrimary={(imageId) => setPrimary.mutateAsync({ spaceId: space.id, imageId })}
+            onReorder={(order) => reorderImages.mutateAsync({ spaceId: space.id, order })}
+          />
+        </div>
+      )}
     </div>
   );
 };
