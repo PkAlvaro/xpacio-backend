@@ -6,19 +6,30 @@ Create Date: 2026-06-18
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ENUM as PGEnum
 
 revision = "0008"
 down_revision = "0007"
 branch_labels = None
 depends_on = None
 
+# Reuse existing enum — create_type=False tells SQLAlchemy not to issue CREATE TYPE
+dispute_status = PGEnum(
+    "open", "under_review", "resolved_refund", "resolved_rejected",
+    name="dispute_status",
+    create_type=False,
+)
+
 
 def upgrade() -> None:
+    # Ensure enum exists (no-op if already present)
     op.execute("""
-        CREATE TYPE IF NOT EXISTS dispute_status AS ENUM (
-            'open', 'under_review', 'resolved_refund', 'resolved_rejected'
-        )
+        DO $$ BEGIN
+            CREATE TYPE dispute_status AS ENUM (
+                'open', 'under_review', 'resolved_refund', 'resolved_rejected'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
     """)
 
     op.create_table(
@@ -27,7 +38,7 @@ def upgrade() -> None:
         sa.Column("reservation_id", UUID(as_uuid=True), sa.ForeignKey("reservations.id"), nullable=False, unique=True),
         sa.Column("opened_by", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
-        sa.Column("status", sa.Enum("open", "under_review", "resolved_refund", "resolved_rejected", name="dispute_status", create_type=False), nullable=False, server_default="open"),
+        sa.Column("status", dispute_status, nullable=False, server_default="open"),
         sa.Column("admin_notes", sa.Text(), nullable=True),
         sa.Column("refund_amount", sa.Integer(), nullable=True),
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
