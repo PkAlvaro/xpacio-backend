@@ -24,6 +24,16 @@ async def open_dispute(
     return {"success": True, "data": {"id": str(dispute.id), "status": dispute.status}}
 
 
+@router.get("/provider/disputes", response_model=dict,
+            summary="Reclamaciones sobre mis espacios (anfitrión)")
+async def provider_disputes(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    items = await dispute_service.get_provider_disputes(user.id, session)
+    return {"success": True, "data": items}
+
+
 @router.get("/disputes/my", response_model=dict, summary="Mis reclamaciones")
 async def my_disputes(
     session: AsyncSession = Depends(get_session),

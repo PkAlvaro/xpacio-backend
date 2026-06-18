@@ -65,6 +65,12 @@ class DisputeStatus(StrEnum):
     RESOLVED_REJECTED = "resolved_rejected"
 
 
+class SpaceApprovalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 DISPUTE_WINDOW_DAYS = 3
 PENDING_RESERVATION_TTL_MINUTES = 15
 GEO_CACHE_TTL_DAYS = 30

@@ -32,10 +32,25 @@ async def health_check(
         logger.error("health_redis_fail", error=str(e))
         checks["redis"] = "fail"
 
+    metrics: dict = {}
+    try:
+        import psutil
+        metrics["cpu_percent"] = psutil.cpu_percent(interval=0.1)
+        vm = psutil.virtual_memory()
+        metrics["memory_used_mb"] = round(vm.used / 1024 / 1024, 1)
+        metrics["memory_total_mb"] = round(vm.total / 1024 / 1024, 1)
+        metrics["memory_percent"] = vm.percent
+        disk = psutil.disk_usage("/")
+        metrics["disk_used_gb"] = round(disk.used / 1024 / 1024 / 1024, 2)
+        metrics["disk_total_gb"] = round(disk.total / 1024 / 1024 / 1024, 2)
+        metrics["disk_percent"] = disk.percent
+    except Exception:
+        pass
+
     healthy = all(v == "ok" for v in checks.values())
     status_code = 200 if healthy else 503
 
     return JSONResponse(
         status_code=status_code,
-        content={"status": "healthy" if healthy else "degraded", "checks": checks},
+        content={"status": "healthy" if healthy else "degraded", "checks": checks, "metrics": metrics},
     )

@@ -15,8 +15,14 @@ from app.exceptions import NotFoundError, DomainException
 from app.constants import UserRole, ReservationStatus
 from app.schemas.reservation import ReservationCancel
 from app.schemas.system_config import SystemConfigOut, SystemConfigUpdate
+from app.models.user_note import UserNote
+from app.models.audit_log import AuditLog
+from app.models.space import Space
+from app.constants import SpaceApprovalStatus
 from app.services import auth_service, space_service, reservation_service
 from app.services.config_service import get_config as _get_config, update_config as _update_config
+from app.services.audit_service import log_action
+from app.utils.time_utils import now_chile
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -92,6 +98,7 @@ async def change_user_role(
     user_id: uuid.UUID,
     data: ChangeRoleRequest,
     session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
 ):
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -106,6 +113,7 @@ async def change_user_role(
         if not existing.scalar_one_or_none():
             session.add(Provider(id=uuid.uuid4(), user_id=user.id))
 
+    await log_action(session, "user_role_changed", admin_id=admin.id, target_type="user", target_id=str(user_id), detail={"old": old_role, "new": data.role})
     await session.commit()
     await session.refresh(user)
     logger.info("role_changed", user_id=str(user.id), old=old_role, new=data.role)
@@ -129,8 +137,11 @@ async def toggle_user_status(
     user_id: uuid.UUID,
     data: ToggleActiveRequest,
     session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
 ):
     user = await auth_service.toggle_user_active(user_id, data.is_active, session)
+    await log_action(session, "user_status_toggled", admin_id=admin.id, target_type="user", target_id=str(user_id), detail={"is_active": data.is_active})
+    await session.commit()
     return {"success": True, "data": UserResponse.model_validate(user).model_dump()}
 
 
@@ -294,4 +305,159 @@ async def admin_health(
         checks["redis"] = "ok"
     except Exception:
         checks["redis"] = "fail"
-    return {"success": True, "data": {"status": "healthy" if all(v == "ok" for v in checks.values()) else "degraded", "checks": checks}}
+
+    metrics: dict = {}
+    try:
+        import psutil
+        metrics["cpu_percent"] = psutil.cpu_percent(interval=0.1)
+        vm = psutil.virtual_memory()
+        metrics["memory_used_mb"] = round(vm.used / 1024 / 1024, 1)
+        metrics["memory_total_mb"] = round(vm.total / 1024 / 1024, 1)
+        metrics["memory_percent"] = vm.percent
+        disk = psutil.disk_usage("/")
+        metrics["disk_used_gb"] = round(disk.used / 1024 / 1024 / 1024, 2)
+        metrics["disk_total_gb"] = round(disk.total / 1024 / 1024 / 1024, 2)
+        metrics["disk_percent"] = disk.percent
+    except Exception:
+        pass
+
+    return {"success": True, "data": {
+        "status": "healthy" if all(v == "ok" for v in checks.values()) else "degraded",
+        "checks": checks,
+        "metrics": metrics,
+    }}
+
+
+# ── Notas de usuario ──────────────────────────────────────────────────────────
+
+@router.get("/users/{user_id}/notes", response_model=dict, dependencies=_admin_dep, summary="Notas internas de un usuario")
+async def get_user_notes(user_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    from sqlalchemy.orm import selectinload
+    rows = (await session.execute(
+        select(UserNote)
+        .where(UserNote.user_id == user_id)
+        .order_by(UserNote.created_at.desc())
+    )).scalars().all()
+    out = []
+    for n in rows:
+        out.append({
+            "id": str(n.id),
+            "body": n.body,
+            "admin_id": str(n.admin_id) if n.admin_id else None,
+            "created_at": n.created_at.isoformat(),
+        })
+    return {"success": True, "data": out}
+
+
+@router.post("/users/{user_id}/notes", response_model=dict, status_code=201, summary="Agregar nota interna a usuario")
+async def add_user_note(
+    user_id: uuid.UUID,
+    body: dict,
+    session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
+):
+    text_body = body.get("body", "").strip()
+    if len(text_body) < 3:
+        raise DomainException("Nota demasiado corta")
+    note = UserNote(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        admin_id=admin.id,
+        body=text_body,
+        created_at=now_chile(),
+    )
+    session.add(note)
+    await log_action(session, "user_note_added", admin_id=admin.id, target_type="user", target_id=str(user_id))
+    await session.commit()
+    return {"success": True, "data": {"id": str(note.id)}}
+
+
+@router.delete("/users/{user_id}/notes/{note_id}", status_code=204, summary="Eliminar nota interna")
+async def delete_user_note(
+    user_id: uuid.UUID,
+    note_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
+):
+    note = await session.get(UserNote, note_id)
+    if not note or str(note.user_id) != str(user_id):
+        raise NotFoundError("Nota")
+    await session.delete(note)
+    await session.commit()
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@router.get("/audit-logs", response_model=dict, dependencies=_admin_dep, summary="Registro de actividad del sistema")
+async def get_audit_logs(
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
+    admin_user_id: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+):
+    from sqlalchemy import func
+    q = select(AuditLog, User.name.label("admin_name")).outerjoin(User, AuditLog.admin_id == User.id)
+    if action:
+        q = q.where(AuditLog.action == action)
+    if target_type:
+        q = q.where(AuditLog.target_type == target_type)
+    if admin_user_id:
+        q = q.where(AuditLog.admin_id == uuid.UUID(admin_user_id))
+
+    count_q = select(func.count()).select_from(select(AuditLog).subquery())
+    total = (await session.execute(count_q)).scalar_one()
+
+    rows = (await session.execute(
+        q.order_by(AuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )).all()
+
+    out = [{
+        "id": str(r[0].id),
+        "action": r[0].action,
+        "target_type": r[0].target_type,
+        "target_id": r[0].target_id,
+        "detail": r[0].detail,
+        "admin_id": str(r[0].admin_id) if r[0].admin_id else None,
+        "admin_name": r[1],
+        "created_at": r[0].created_at.isoformat(),
+    } for r in rows]
+
+    return {"success": True, "data": out, "meta": {"total": total, "page": page, "page_size": page_size}}
+
+
+# ── Aprobación de espacios ────────────────────────────────────────────────────
+
+@router.patch("/spaces/{space_id}/approve", response_model=dict, summary="Aprobar espacio")
+async def approve_space(
+    space_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
+):
+    space = await session.get(Space, space_id)
+    if not space:
+        raise NotFoundError("Espacio")
+    space.approval_status = SpaceApprovalStatus.APPROVED
+    space.approval_note = None
+    await log_action(session, "space_approved", admin_id=admin.id, target_type="space", target_id=str(space_id))
+    await session.commit()
+    return {"success": True, "data": {"id": str(space_id), "approval_status": space.approval_status}}
+
+
+@router.patch("/spaces/{space_id}/reject", response_model=dict, summary="Rechazar espacio")
+async def reject_space(
+    space_id: uuid.UUID,
+    body: dict,
+    session: AsyncSession = Depends(get_session),
+    admin=Depends(require_role(UserRole.ADMIN)),
+):
+    space = await session.get(Space, space_id)
+    if not space:
+        raise NotFoundError("Espacio")
+    space.approval_status = SpaceApprovalStatus.REJECTED
+    space.approval_note = body.get("note")
+    space.is_active = False
+    await log_action(session, "space_rejected", admin_id=admin.id, target_type="space", target_id=str(space_id), detail={"note": body.get("note")})
+    await session.commit()
+    return {"success": True, "data": {"id": str(space_id), "approval_status": space.approval_status}}

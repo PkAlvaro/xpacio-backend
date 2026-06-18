@@ -145,6 +145,31 @@ async def list_disputes(
     return out, total
 
 
+async def get_provider_disputes(
+    provider_id: uuid.UUID,
+    session: AsyncSession,
+) -> list[dict]:
+    rows = (await session.execute(
+        select(Dispute, Space.name.label("space_name"))
+        .join(Reservation, Dispute.reservation_id == Reservation.id)
+        .join(Space, Reservation.space_id == Space.id)
+        .where(Space.provider_id == provider_id)
+        .order_by(Dispute.created_at.desc())
+    )).all()
+
+    out = []
+    for row in rows:
+        d = row[0]
+        evidence = (await session.execute(
+            select(DisputeEvidence).where(DisputeEvidence.dispute_id == d.id)
+        )).scalars().all()
+        item = {c.name: getattr(d, c.name) for c in d.__table__.columns}
+        item["space_name"] = row[1]
+        item["evidence"] = [{"id": str(e.id), "url": e.url, "filename": e.filename, "uploaded_at": e.uploaded_at} for e in evidence]
+        out.append(item)
+    return out
+
+
 async def get_client_disputes(
     client_id: uuid.UUID,
     session: AsyncSession,
