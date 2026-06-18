@@ -637,6 +637,22 @@ async def set_primary_image(space_id: uuid.UUID, image_id: uuid.UUID, session: A
     await session.commit()
 
 
+async def reorder_space_images(
+    space_id: uuid.UUID,
+    order: list[dict],  # [{id: uuid, display_order: int}]
+    session: AsyncSession,
+) -> None:
+    imgs = (await session.execute(
+        select(SpaceImage).where(SpaceImage.space_id == space_id)
+    )).scalars().all()
+    img_map = {img.id: img for img in imgs}
+    for item in order:
+        img = img_map.get(item["id"])
+        if img:
+            img.display_order = item["display_order"]
+    await session.commit()
+
+
 async def admin_stats(session: AsyncSession) -> dict:
     from datetime import date, timedelta
     from sqlalchemy import cast, Date as SADate

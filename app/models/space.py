@@ -45,7 +45,7 @@ class Space(Base, TimestampMixin):
 
     provider = relationship("Provider", back_populates="spaces")
     schedules = relationship("SpaceSchedule", back_populates="space", cascade="all, delete-orphan")
-    images = relationship("SpaceImage", back_populates="space", cascade="all, delete-orphan")
+    images = relationship("SpaceImage", back_populates="space", cascade="all, delete-orphan", order_by="SpaceImage.display_order")
     amenities = relationship("SpaceAmenity", back_populates="space", cascade="all, delete-orphan")
     reservations = relationship("Reservation", back_populates="space")
     reviews = relationship("Review", back_populates="space")

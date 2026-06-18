@@ -312,6 +312,23 @@ async def set_primary_image(
     return {"success": True}
 
 
+@router.patch(
+    "/{space_id}/images/order",
+    response_model=dict,
+    summary="Reordenar imágenes (proveedor dueño)",
+)
+async def reorder_images(
+    space_id: uuid.UUID,
+    order: list[dict],
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    space = await space_service.get_space(space_id, session)
+    await space_service._assert_owner(space, user.id, session)
+    await space_service.reorder_space_images(space_id, order, session)
+    return {"success": True}
+
+
 @router.get(
     "/{space_id}/sub-spaces",
     response_model=dict,

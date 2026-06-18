@@ -220,6 +220,12 @@ async def set_primary_image(space_id: uuid.UUID, image_id: uuid.UUID, session: A
     return {"success": True}
 
 
+@router.patch("/spaces/{space_id}/images/order", response_model=dict, dependencies=_admin_dep, summary="Reordenar imágenes")
+async def reorder_images(space_id: uuid.UUID, order: list[dict], session: AsyncSession = Depends(get_session)):
+    await space_service.reorder_space_images(space_id, order, session)
+    return {"success": True}
+
+
 @router.put("/spaces/{space_id}/schedules", response_model=dict, dependencies=_admin_dep, summary="Configurar horarios (admin)")
 async def admin_set_schedules(
     space_id: uuid.UUID,
