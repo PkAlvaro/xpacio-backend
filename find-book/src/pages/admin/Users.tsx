@@ -1,18 +1,32 @@
 import { useState } from "react";
-import { Search, ShieldCheck, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Search, ShieldCheck, UserCheck, UserX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAdminUsers, useChangeRole, useToggleUserStatus } from "@/hooks/useAdmin";
+import { useDebounce } from "@/hooks/useDebounce";
 import type { AdminUserListItem } from "@/types/api";
 
-const ROLE_LABELS: Record<string, string> = { admin: "Admin", user: "Usuario" };
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  provider: "Anfitrión",
+  client: "Cliente",
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: "bg-primary/10 text-primary",
+  provider: "bg-blue-500/10 text-blue-600",
+  client: "bg-secondary text-muted-foreground",
+};
+
+const ROLES_CYCLE: string[] = ["client", "provider", "admin"];
 
 export default function Users() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const debouncedQ = useDebounce(q, 350);
 
-  const { data, isLoading } = useAdminUsers({ page, page_size: 20 });
+  const { data, isLoading } = useAdminUsers({ page, page_size: 20, q: debouncedQ || undefined });
   const changeRole = useChangeRole();
   const toggleStatus = useToggleUserStatus();
 
@@ -20,12 +34,7 @@ export default function Users() {
   const total = data?.meta?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
-  const filtered = q
-    ? users.filter(u => u.name.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase()))
-    : users;
-
-  const handleRoleToggle = async (u: AdminUserListItem) => {
-    const newRole = u.role === "admin" ? "user" : "admin";
+  const handleRoleChange = async (u: AdminUserListItem, newRole: string) => {
     await changeRole.mutateAsync({ userId: u.id, role: newRole });
     toast.success(`Rol cambiado a ${ROLE_LABELS[newRole]}`);
   };
@@ -48,8 +57,8 @@ export default function Users() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="Filtrar por nombre o email..."
+          onChange={e => { setQ(e.target.value); setPage(1); }}
+          placeholder="Buscar por nombre o email..."
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 ring-primary/20"
         />
       </div>
@@ -57,7 +66,7 @@ export default function Users() {
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground text-sm">Cargando...</div>
-        ) : filtered.length === 0 ? (
+        ) : users.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">No hay usuarios.</div>
         ) : (
           <table className="w-full text-sm">
@@ -71,7 +80,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(u => (
+              {users.map(u => (
                 <tr key={u.id} className="border-b border-border last:border-0 hover:bg-secondary/30 transition-smooth">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
@@ -83,13 +92,19 @@ export default function Users() {
                   </td>
                   <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{u.email}</td>
                   <td className="py-3 px-4">
-                    <span className={cn(
-                      "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full",
-                      u.role === "admin" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
-                    )}>
-                      {u.role === "admin" ? <ShieldCheck className="w-3 h-3" /> : null}
-                      {ROLE_LABELS[u.role] ?? u.role}
-                    </span>
+                    <select
+                      value={u.role}
+                      onChange={e => handleRoleChange(u, e.target.value)}
+                      disabled={changeRole.isPending}
+                      className={cn(
+                        "text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer outline-none",
+                        ROLE_COLORS[u.role] ?? "bg-secondary text-muted-foreground"
+                      )}
+                    >
+                      {ROLES_CYCLE.map(r => (
+                        <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="py-3 px-4">
                     <span className={cn(
@@ -101,18 +116,15 @@ export default function Users() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1 justify-end">
-                      <button
-                        onClick={() => handleRoleToggle(u)}
-                        title={u.role === "admin" ? "Quitar admin" : "Hacer admin"}
-                        className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-smooth"
-                      >
-                        {u.role === "admin" ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
-                      </button>
+                      {u.role === "admin" && (
+                        <ShieldCheck className="w-4 h-4 text-primary mr-1" title="Administrador" />
+                      )}
                       <button
                         onClick={() => handleStatusToggle(u)}
                         title={u.is_active ? "Desactivar" : "Activar"}
+                        disabled={toggleStatus.isPending}
                         className={cn(
-                          "p-2 rounded-lg transition-smooth",
+                          "p-2 rounded-lg transition-smooth disabled:opacity-50",
                           u.is_active
                             ? "hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                             : "hover:bg-success/10 text-muted-foreground hover:text-success"

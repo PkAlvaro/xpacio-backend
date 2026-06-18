@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Building2, Users, LogOut, ChevronRight, Menu, X } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CalendarCheck, AlertTriangle, LogOut, ChevronRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useMe } from "@/hooks/useAuth";
@@ -8,6 +8,8 @@ import { clearTokens } from "@/lib/api";
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/espacios", label: "Espacios", icon: Building2 },
+  { to: "/admin/reservaciones", label: "Reservaciones", icon: CalendarCheck },
+  { to: "/admin/reclamaciones", label: "Reclamaciones", icon: AlertTriangle },
   { to: "/admin/usuarios", label: "Usuarios", icon: Users },
 ];
 

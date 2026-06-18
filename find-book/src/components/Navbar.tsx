@@ -1,9 +1,9 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Building2, Menu, User, LayoutDashboard, LogOut, HomeIcon } from "lucide-react";
+import { Building2, Menu, User, LayoutDashboard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useMe, useLogout } from "@/hooks/useAuth";
+import { useMe } from "@/hooks/useAuth";
 import { clearTokens } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,18 +19,13 @@ export const Navbar = () => {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: user, isLoading } = useMe();
-  const logoutMut = useLogout();
 
-  const logout = async () => {
+  const logout = () => {
+    clearTokens();
+    qc.clear();
+    navigate("/");
     setOpen(false);
     setUserMenuOpen(false);
-    try {
-      await logoutMut.mutateAsync();
-    } catch {
-      clearTokens();
-      qc.clear();
-    }
-    navigate("/");
   };
 
   return (
@@ -75,15 +70,6 @@ export const Navbar = () => {
               </button>
               {userMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-lg py-1 z-50">
-                  {user.role === "provider" && (
-                    <Link
-                      to="/mis-espacios"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-secondary transition-smooth"
-                    >
-                      <HomeIcon className="w-4 h-4" /> Mis espacios
-                    </Link>
-                  )}
                   {user.role === "admin" && (
                     <Link
                       to="/admin"
@@ -127,12 +113,6 @@ export const Navbar = () => {
             {!isLoading && user ? (
               <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-border">
                 <p className="px-4 py-1 text-xs text-muted-foreground">{user.email}</p>
-                {user.role === "provider" && (
-                  <Link to="/mis-espacios" onClick={() => setOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm hover:bg-secondary">
-                    <HomeIcon className="w-4 h-4" /> Mis espacios
-                  </Link>
-                )}
                 {user.role === "admin" && (
                   <Link to="/admin" onClick={() => setOpen(false)}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm hover:bg-secondary">

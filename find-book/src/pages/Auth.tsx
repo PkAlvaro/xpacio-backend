@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,6 @@ import { ApiError } from "@/lib/api";
 
 export const Login = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/";
   const login = useLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,7 +17,7 @@ export const Login = () => {
     try {
       await login.mutateAsync({ email, password });
       toast.success("¡Sesión iniciada!");
-      navigate(redirectTo);
+      navigate("/");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Credenciales incorrectas");
     }
@@ -34,7 +32,7 @@ export const Login = () => {
           {login.isPending ? "Ingresando..." : "Iniciar sesión"}
         </Button>
         <p className="text-sm text-center text-muted-foreground">
-          ¿No tienes cuenta? <Link to={`/registro${redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`} className="text-primary font-medium hover:underline">Regístrate</Link>
+          ¿No tienes cuenta? <Link to="/registro" className="text-primary font-medium hover:underline">Regístrate</Link>
         </p>
       </form>
     </AuthShell>
@@ -43,8 +41,6 @@ export const Login = () => {
 
 export const Register = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/";
   const register = useRegister();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,7 +52,7 @@ export const Register = () => {
     try {
       await register.mutateAsync({ name, email, password, role: isHost ? "provider" : "client" });
       toast.success("¡Cuenta creada!");
-      navigate(redirectTo);
+      navigate("/");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Error al crear cuenta");
     }
@@ -84,7 +80,7 @@ export const Register = () => {
           {register.isPending ? "Creando cuenta..." : "Crear cuenta"}
         </Button>
         <p className="text-sm text-center text-muted-foreground">
-          ¿Ya tienes cuenta? <Link to={`/login${redirectTo !== "/" ? `?redirect=${encodeURIComponent(redirectTo)}` : ""}`} className="text-primary font-medium hover:underline">Inicia sesión</Link>
+          ¿Ya tienes cuenta? <Link to="/login" className="text-primary font-medium hover:underline">Inicia sesión</Link>
         </p>
       </form>
     </AuthShell>

@@ -1,14 +1,23 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Calendar, Clock, X, Star } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Calendar, Clock, X, Star, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useMyReservations, useCancelReservation } from "@/hooks/useReservations";
 import ReviewForm from "@/components/ReviewForm";
+import { DisputeForm } from "@/components/DisputeForm";
 import { ApiError } from "@/lib/api";
-import { useMe } from "@/hooks/useAuth";
 import type { ReservationStatus } from "@/types/api";
+
+const DISPUTE_WINDOW_DAYS = 3;
+
+function isWithinDisputeWindow(endDate: string, endTime: string): boolean {
+  const end = new Date(`${endDate}T${endTime}`);
+  const now = new Date();
+  const diffMs = now.getTime() - end.getTime();
+  return diffMs >= 0 && diffMs <= DISPUTE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
 
 const formatCLP = (n: number) =>
   new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n);
@@ -34,7 +43,9 @@ const STATUS_CLASS: Record<ReservationStatus, string> = {
 interface ApiReservation {
   id: string;
   space_id: string;
+  space_name?: string | null;
   date: string;
+  end_date?: string | null;
   start_time: string;
   end_time: string;
   hours: number;
@@ -43,12 +54,11 @@ interface ApiReservation {
 }
 
 const MyReservations = () => {
-  const navigate = useNavigate();
-  const { data: user, isLoading: authLoading } = useMe();
-  const { data: reservations = [], isLoading, isError } = useMyReservations();
+  const { data: reservations = [], isLoading } = useMyReservations();
   const cancel = useCancelReservation();
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
+  const [disputingReservation, setDisputingReservation] = useState<ApiReservation | null>(null);
 
   const handleCancel = async (id: string) => {
     try {
@@ -59,23 +69,12 @@ const MyReservations = () => {
     }
   };
 
-  if (!authLoading && !user) {
-    return (
-      <div className="container py-20 max-w-xl text-center">
-        <p className="text-muted-foreground mb-4">Inicia sesión para ver tus reservas.</p>
-        <Button variant="hero" onClick={() => navigate(`/login?redirect=${encodeURIComponent("/mis-reservas")}`)}>
-          Iniciar sesión
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="container py-10 max-w-4xl">
       <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Mis reservas</h1>
       <p className="text-muted-foreground mb-8">Gestiona tus arriendos pasados y próximos.</p>
 
-      {(isLoading || authLoading) && (
+      {isLoading && (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />
@@ -83,37 +82,24 @@ const MyReservations = () => {
         </div>
       )}
 
-      {isError && (
-        <div className="text-center py-20 border border-dashed border-border rounded-2xl">
-          <p className="text-muted-foreground mb-4">No se pudieron cargar tus reservas.</p>
-          <Button variant="hero" onClick={() => navigate(`/login?redirect=${encodeURIComponent("/mis-reservas")}`)}>
-            Iniciar sesión nuevamente
-          </Button>
-        </div>
-      )}
-
-      {!isLoading && !isError && reservations.length === 0 && (
+      {!isLoading && reservations.length === 0 && (
         <div className="text-center py-20 border border-dashed border-border rounded-2xl">
           <p className="text-muted-foreground mb-4">Aún no tienes reservas.</p>
           <Link to="/buscar"><Button variant="hero">Explorar espacios</Button></Link>
         </div>
       )}
 
-      {!isLoading && !isError && reservations.length > 0 && (
+      {!isLoading && reservations.length > 0 && (
         <div className="space-y-4">
           {reservations.map((r) => (
             <div key={r.id} className="bg-card border border-border rounded-2xl p-4 shadow-soft flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
-                    <h3 className="font-semibold">
-                      {r.space_name
-                        ? <Link to={`/espacio/${r.space_id}`} className="hover:underline">{r.space_name}</Link>
-                        : `Reserva #${r.id.slice(0, 8)}`}
-                    </h3>
-                    {r.space_name && (
-                      <p className="text-xs text-muted-foreground">#{r.id.slice(0, 8)}</p>
-                    )}
+                    <h3 className="font-semibold">Reserva #{r.id.slice(0, 8)}</h3>
+                    <Link to={`/espacio/${r.space_id}`} className="text-sm text-primary hover:underline">
+                      Ver espacio
+                    </Link>
                   </div>
                   <span className={cn("px-3 py-1 rounded-full text-xs font-medium", STATUS_CLASS[r.status])}>
                     {STATUS_LABEL[r.status]}
@@ -151,6 +137,16 @@ const MyReservations = () => {
                       {reviewingId === r.id ? "Cerrar" : "Dejar reseña"}
                     </Button>
                   )}
+                  {r.status === "finished" && isWithinDisputeWindow(r.end_date ?? r.date, r.end_time) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50"
+                      onClick={() => setDisputingReservation(r)}
+                    >
+                      <AlertTriangle className="w-4 h-4" /> Reclamar
+                    </Button>
+                  )}
                 </div>
                 {reviewingId === r.id && (
                   <div className="mt-3">
@@ -167,6 +163,13 @@ const MyReservations = () => {
             </div>
           ))}
         </div>
+      )}
+      {disputingReservation && (
+        <DisputeForm
+          reservationId={disputingReservation.id}
+          spaceName={disputingReservation.space_name ?? undefined}
+          onClose={() => setDisputingReservation(null)}
+        />
       )}
     </div>
   );

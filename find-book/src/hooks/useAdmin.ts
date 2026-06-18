@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAccessToken } from "@/lib/api";
-import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, SpaceImage } from "@/types/api";
+import type { ApiResponse, AdminStats, AdminSpaceListItem, AdminSpaceCreate, AdminSpaceUpdate, SpaceDetail, AdminUserListItem, AdminReservationItem, SpaceImage } from "@/types/api";
 
 // ── Stats ──────────────────────────────────────────────────────────────────
 export function useAdminStats() {
@@ -114,14 +114,15 @@ export function useSetAdminSchedules() {
 }
 
 // ── Users ──────────────────────────────────────────────────────────────────
-export function useAdminUsers(params: { page?: number; page_size?: number } = {}) {
+export function useAdminUsers(params: { page?: number; page_size?: number; q?: string } = {}) {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.page_size) qs.set("page_size", String(params.page_size));
+  if (params.q) qs.set("q", params.q);
   return useQuery({
     queryKey: ["admin", "users", params],
     queryFn: () => apiRequest<ApiResponse<AdminUserListItem[]>>(`/admin/users?${qs}`).then(r => ({ items: r.data, meta: r.meta })),
-    staleTime: 30_000,
+    staleTime: 15_000,
   });
 }
 
@@ -140,5 +141,30 @@ export function useToggleUserStatus() {
     mutationFn: ({ userId, is_active }: { userId: string; is_active: boolean }) =>
       apiRequest(`/admin/users/${userId}/status`, { method: "PATCH", body: JSON.stringify({ is_active }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+  });
+}
+
+// ── Reservations ───────────────────────────────────────────────────────────
+export function useAdminReservations(params: { status?: string; page?: number; page_size?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set("status", params.status);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  return useQuery({
+    queryKey: ["admin", "reservations", params],
+    queryFn: () => apiRequest<ApiResponse<AdminReservationItem[]>>(`/admin/reservations?${qs}`).then(r => ({ items: r.data ?? [], meta: r.meta })),
+    staleTime: 15_000,
+  });
+}
+
+export function useAdminCancelReservation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reservationId, reason }: { reservationId: string; reason?: string }) =>
+      apiRequest(`/admin/reservations/${reservationId}/cancel`, { method: "POST", body: JSON.stringify({ reason: reason ?? null }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "reservations"] });
+      qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+    },
   });
 }

@@ -47,12 +47,10 @@ export const SpaceCard = ({ space, index = 0 }: { space: SpaceListItem; index?: 
         <div className="pt-3 space-y-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold leading-tight">{space.name}</h3>
-            {space.review_count > 0 && (
-              <div className="flex items-center gap-1 text-sm shrink-0">
-                <Star className="w-3.5 h-3.5 fill-foreground" />
-                <span className="font-medium">{space.rating.toFixed(1)}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1 text-sm shrink-0">
+              <Star className="w-3.5 h-3.5 fill-foreground" />
+              <span className="font-medium">{space.rating.toFixed(1)}</span>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5" /> {space.address}

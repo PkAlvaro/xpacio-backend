@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom"; // useNavigate used in SearchMapView
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutList, Map as MapIcon, SlidersHorizontal, LocateFixed, Loader2 } from "lucide-react";
+import { LayoutList, Map as MapIcon, SlidersHorizontal, Tag } from "lucide-react";
 import { SearchBar } from "@/components/SearchBar";
 import { SpaceCard } from "@/components/SpaceCard";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import { Slider } from "@/components/ui/slider";
 import { SpaceMap } from "@/components/SpaceMap";
 import { cn } from "@/lib/utils";
 import { useSpaces } from "@/hooks/useSpaces";
-import { toast } from "sonner";
 import type { SpaceType, SpaceListItem } from "@/types/api";
 
 const formatCLP = (n: number) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(n);
@@ -20,45 +19,17 @@ const Search = () => {
   const [view, setView] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(true);
   const [maxPrice, setMaxPrice] = useState(50000);
-  const [minCapacity, setMinCapacity] = useState(1);
   const [selectedType, setSelectedType] = useState<SpaceType | undefined>();
-  const [userLat, setUserLat] = useState<number | undefined>();
-  const [userLng, setUserLng] = useState<number | undefined>();
-  const [locating, setLocating] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   const city = params.get("location") || undefined;
   const nameQ = params.get("q") || undefined;
 
-  const handleNearMe = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocalización no disponible en este navegador");
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLat(pos.coords.latitude);
-        setUserLng(pos.coords.longitude);
-        setLocating(false);
-        toast.success("Mostrando espacios cercanos a tu ubicación");
-      },
-      () => {
-        setLocating(false);
-        toast.error("No se pudo obtener tu ubicación");
-      },
-      { timeout: 8000 }
-    );
-  };
-
   const { data, isLoading } = useSpaces({
-    city: userLat ? undefined : city,
+    city,
     q: nameQ,
     type: selectedType,
     max_price: maxPrice,
-    min_capacity: minCapacity > 1 ? minCapacity : undefined,
-    lat: userLat,
-    lng: userLng,
-    radius_km: userLat ? 10 : undefined,
   });
 
   const spaces = data?.items ?? [];
@@ -81,16 +52,7 @@ const Search = () => {
               {params.get("date") || "Hoy"} · {params.get("time") || "Cualquier hora"}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={handleNearMe} disabled={locating}>
-              {locating ? <Loader2 className="w-4 h-4 animate-spin" /> : <LocateFixed className="w-4 h-4" />}
-              {userLat ? "Cerca de mí ✓" : "Cerca de mí"}
-            </Button>
-            {userLat && (
-              <Button variant="ghost" size="sm" onClick={() => { setUserLat(undefined); setUserLng(undefined); }}>
-                Limpiar ubicación
-              </Button>
-            )}
+          <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
               <SlidersHorizontal className="w-4 h-4" /> Filtros
             </Button>
@@ -119,12 +81,6 @@ const Search = () => {
                   <Slider value={[maxPrice]} min={5000} max={50000} step={1000}
                     onValueChange={(v) => setMaxPrice(v[0])} />
                   <p className="text-sm text-muted-foreground mt-2">{formatCLP(maxPrice)} / hora</p>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-3">Capacidad mínima</h3>
-                  <Slider value={[minCapacity]} min={1} max={50} step={1}
-                    onValueChange={(v) => setMinCapacity(v[0])} />
-                  <p className="text-sm text-muted-foreground mt-2">{minCapacity === 1 ? "Sin mínimo" : `${minCapacity} personas`}</p>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-3">Tipo de espacio</h3>

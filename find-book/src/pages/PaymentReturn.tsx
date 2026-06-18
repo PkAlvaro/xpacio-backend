@@ -50,8 +50,10 @@ export const PaymentReturn = () => {
         return;
       }
       try {
-        const json = await apiRequest(`/payments/transbank/confirm?token_ws=${encodeURIComponent(tokenWs)}`, {
+        const json = await apiRequest("/payments/transbank/confirm", {
           method: "POST",
+          query: { token_ws: tokenWs },
+          auth: false,
         });
         const data = json?.data ?? json;
         if (!cancelled) setStatus(data?.status === "paid" ? "success" : "failed");

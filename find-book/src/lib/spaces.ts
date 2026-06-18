@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import office from "@/assets/space-office.jpg";
 import court from "@/assets/space-court.jpg";
 import meeting from "@/assets/space-meeting.jpg";
@@ -8,19 +8,6 @@ import rooftop from "@/assets/space-rooftop.jpg";
 
 export type SpaceType = "Oficina" | "Cancha" | "Sala" | "Salón" | "Estudio" | "Terraza";
 export type DiscountType = "percentage" | "volume";
-
-export interface SpaceImage {
-  id: string;
-  url: string;
-  is_primary: boolean;
-}
-
-export interface Schedule {
-  id?: string;
-  day_of_week: number;
-  open_time: string;
-  close_time: string;
-}
 
 // Imagen de respaldo por tipo cuando el espacio no tiene imágenes cargadas
 const FALLBACK_BY_TYPE: Record<string, string> = {
@@ -60,8 +47,6 @@ export interface Space {
   lat: number | null;
   lng: number | null;
   distanceKm?: number | null;
-  images: SpaceImage[];
-  schedules: Schedule[];
   // SC-001 — descuentos
   discountActive: boolean;
   discountType: DiscountType | null;
@@ -87,8 +72,7 @@ interface ApiSpace {
   review_count: number;
   is_active: boolean;
   primary_image?: string | null;
-  images?: { id: string; url: string; is_primary: boolean }[];
-  schedules?: { id: string; day_of_week: number; open_time: string; close_time: string }[];
+  images?: { url: string; is_primary: boolean }[];
   amenities?: string[];
   distance_km?: number | null;
   discount_active?: boolean;
@@ -120,8 +104,6 @@ export function mapSpace(s: ApiSpace): Space {
     lat: s.lat != null ? Number(s.lat) : null,
     lng: s.lng != null ? Number(s.lng) : null,
     distanceKm: s.distance_km ?? null,
-    images: (s.images || []).map((i) => ({ id: i.id, url: i.url, is_primary: i.is_primary })),
-    schedules: (s.schedules || []).map((sc) => ({ id: sc.id, day_of_week: sc.day_of_week, open_time: sc.open_time, close_time: sc.close_time })),
     discountActive: !!s.discount_active,
     discountType: s.discount_type ?? null,
     discountValue: s.discount_value != null ? Number(s.discount_value) : null,
@@ -197,23 +179,6 @@ export async function updateSpaceOffer(id: string, payload: OfferUpdate): Promis
   return mapSpace(data);
 }
 
-export interface SpaceUpdatePayload {
-  name?: string;
-  type?: SpaceType;
-  description?: string;
-  address?: string;
-  city?: string;
-  price_per_hour?: number;
-  capacity?: number;
-  amenities?: string[];
-  is_active?: boolean;
-}
-
-export async function updateSpace(id: string, payload: SpaceUpdatePayload): Promise<Space> {
-  const data = await apiRequest<ApiSpace>(`/spaces/${id}`, { method: "PATCH", body: payload });
-  return mapSpace(data);
-}
-
 export async function fetchIncomingReservations(status?: string): Promise<IncomingReservation[]> {
   const query: Record<string, string> = {};
   if (status) query.status = status;
@@ -239,6 +204,13 @@ export interface IncomingReservation {
   status: string;
 }
 
+export async function providerCancelReservation(reservationId: string, reason?: string): Promise<void> {
+  await apiRequest(`/reservations/${reservationId}/provider-cancel`, {
+    method: "POST",
+    body: { reason: reason ?? null },
+  });
+}
+
 export interface SpaceCreatePayload {
   name: string;
   type: SpaceType;
@@ -253,30 +225,6 @@ export interface SpaceCreatePayload {
 export async function createSpace(payload: SpaceCreatePayload): Promise<Space> {
   const data = await apiRequest<ApiSpace>("/spaces", { method: "POST", body: payload });
   return mapSpace(data);
-}
-
-export async function setSchedules(id: string, schedules: Omit<Schedule, "id">[]): Promise<Schedule[]> {
-  const data = await apiRequest<{ success: boolean; data: Schedule[] }>(`/spaces/${id}/schedules`, {
-    method: "PUT",
-    body: JSON.stringify(schedules),
-  });
-  return data.data;
-}
-
-export async function uploadSpaceImage(id: string, file: File, setPrimary = false): Promise<SpaceImage> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const url = setPrimary ? `/spaces/${id}/images?set_primary=true` : `/spaces/${id}/images`;
-  const data = await apiUpload<{ success: boolean; data: SpaceImage }>(url, fd);
-  return data.data;
-}
-
-export async function deleteSpaceImage(spaceId: string, imageId: string): Promise<void> {
-  await apiRequest(`/spaces/${spaceId}/images/${imageId}`, { method: "DELETE" });
-}
-
-export async function setPrimaryImage(spaceId: string, imageId: string): Promise<void> {
-  await apiRequest(`/spaces/${spaceId}/images/${imageId}/primary`, { method: "PATCH" });
 }
 
 export const TIME_SLOTS = [

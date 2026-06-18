@@ -28,6 +28,8 @@ const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
 const AdminSpaces = lazy(() => import("./pages/admin/Spaces"));
 const AdminSpaceEditor = lazy(() => import("./pages/admin/SpaceEditor"));
 const AdminUsers = lazy(() => import("./pages/admin/Users"));
+const AdminReservations = lazy(() => import("./pages/admin/Reservations"));
+const AdminDisputes = lazy(() => import("./pages/admin/Disputes"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +69,8 @@ const App = () => (
                 <Route path="espacios" element={<AdminSpaces />} />
                 <Route path="espacios/nuevo" element={<AdminSpaceEditor />} />
                 <Route path="espacios/:id/editar" element={<AdminSpaceEditor />} />
+                <Route path="reservaciones" element={<AdminReservations />} />
+                <Route path="reclamaciones" element={<AdminDisputes />} />
                 <Route path="usuarios" element={<AdminUsers />} />
               </Route>
               <Route path="*" element={<NotFound />} />

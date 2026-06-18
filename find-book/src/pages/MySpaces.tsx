@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck, Pencil, ToggleLeft, ToggleRight, ImagePlus, Trash2, Star } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Ban } from "lucide-react";
 import {
-  fetchMySpaces, updateSpaceOffer, updateSpace, createSpace, fetchIncomingReservations,
-  setSchedules, uploadSpaceImage, deleteSpaceImage, setPrimaryImage,
-  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceUpdatePayload, SpaceType, Schedule, SpaceImage, IncomingReservation,
+  fetchMySpaces, updateSpaceOffer, createSpace, fetchIncomingReservations,
+  providerCancelReservation,
+  formatCLP, Space, DiscountType, SpaceCreatePayload, SpaceType, IncomingReservation,
 } from "@/lib/spaces";
-import { ApiError, apiRequest } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,9 +30,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 const MySpaces = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"spaces" | "reservations" | "profile">("spaces");
+  const [tab, setTab] = useState<"spaces" | "reservations">("spaces");
   const [showCreate, setShowCreate] = useState(false);
-  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
+  const [reservationStatus, setReservationStatus] = useState<string | undefined>(undefined);
   const { data: me, isLoading: meLoading } = useMe();
 
   useEffect(() => {
@@ -52,9 +52,20 @@ const MySpaces = () => {
   });
 
   const { data: incoming = [], isLoading: loadingIncoming } = useQuery({
-    queryKey: ["incoming-reservations"],
-    queryFn: () => fetchIncomingReservations(),
+    queryKey: ["incoming-reservations", reservationStatus],
+    queryFn: () => fetchIncomingReservations(reservationStatus),
     enabled: !!me && tab === "reservations",
+  });
+
+  const qc = useQueryClient();
+  const cancelMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      providerCancelReservation(id, reason),
+    onSuccess: () => {
+      toast.success("Reserva cancelada");
+      qc.invalidateQueries({ queryKey: ["incoming-reservations"] });
+    },
+    onError: () => toast.error("No se pudo cancelar la reserva"),
   });
 
   return (
@@ -86,14 +97,6 @@ const MySpaces = () => {
         >
           <CalendarCheck className="w-3.5 h-3.5" /> Reservas recibidas
         </button>
-        <button
-          onClick={() => setTab("profile")}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-smooth -mb-px ${
-            tab === "profile" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Mi perfil
-        </button>
       </div>
 
       {/* Mis espacios */}
@@ -101,9 +104,6 @@ const MySpaces = () => {
         <>
           {showCreate && (
             <CreateSpaceForm onClose={() => setShowCreate(false)} />
-          )}
-          {editingSpace && (
-            <EditSpaceForm space={editingSpace} onClose={() => setEditingSpace(null)} />
           )}
           {loadingSpaces ? (
             <div className="text-center py-20 text-muted-foreground">Cargando…</div>
@@ -116,27 +116,52 @@ const MySpaces = () => {
             </div>
           ) : (
             <div className="space-y-5">
-              {spaces.map((s) => <SpaceOfferCard key={s.id} space={s} onEdit={() => setEditingSpace(s)} />)}
+              {spaces.map((s) => <SpaceOfferCard key={s.id} space={s} />)}
             </div>
           )}
         </>
       )}
 
-      {/* Perfil proveedor */}
-      {tab === "profile" && <ProviderProfileForm />}
-
       {/* Reservas recibidas */}
       {tab === "reservations" && (
         <>
+          <div className="flex gap-1 mb-5 flex-wrap">
+            {([
+              [undefined, "Todas"],
+              ["pending", "Pendientes"],
+              ["confirmed", "Confirmadas"],
+              ["cancelled", "Canceladas"],
+              ["completed", "Completadas"],
+            ] as const).map(([val, label]) => (
+              <button
+                key={label}
+                onClick={() => setReservationStatus(val)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-smooth border ${
+                  reservationStatus === val
+                    ? "bg-foreground text-background border-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {loadingIncoming ? (
             <div className="text-center py-20 text-muted-foreground">Cargando reservas…</div>
           ) : incoming.length === 0 ? (
             <div className="text-center py-20 border border-dashed border-border rounded-2xl">
-              <p className="text-muted-foreground">Aún no tienes reservas recibidas.</p>
+              <p className="text-muted-foreground">No hay reservas{reservationStatus ? ` con estado "${STATUS_LABELS[reservationStatus]}"` : ""}.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {incoming.map((r) => <IncomingReservationCard key={r.id} reservation={r} />)}
+              {incoming.map((r) => (
+                <IncomingReservationCard
+                  key={r.id}
+                  reservation={r}
+                  onCancel={(id) => cancelMut.mutate({ id })}
+                  cancelling={cancelMut.isPending}
+                />
+              ))}
             </div>
           )}
         </>
@@ -160,41 +185,11 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
     amenities: [],
   });
   const [amenityInput, setAmenityInput] = useState("");
-  const [schedules, setSchedules2] = useState<Omit<Schedule, "id">[]>([
-    { day_of_week: 0, open_time: "08:00", close_time: "20:00" },
-    { day_of_week: 1, open_time: "08:00", close_time: "20:00" },
-    { day_of_week: 2, open_time: "08:00", close_time: "20:00" },
-    { day_of_week: 3, open_time: "08:00", close_time: "20:00" },
-    { day_of_week: 4, open_time: "08:00", close_time: "20:00" },
-  ]);
-  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
-  const [stagedPreviews, setStagedPreviews] = useState<string[]>([]);
-
-  const addFiles = (files: FileList | null) => {
-    if (!files) return;
-    const valid = Array.from(files).filter((f) => f.type.startsWith("image/")).slice(0, 8 - stagedFiles.length);
-    setStagedFiles((prev) => [...prev, ...valid]);
-    setStagedPreviews((prev) => [...prev, ...valid.map((f) => URL.createObjectURL(f))]);
-  };
-
-  const removeStaged = (idx: number) => {
-    URL.revokeObjectURL(stagedPreviews[idx]);
-    setStagedFiles((prev) => prev.filter((_, i) => i !== idx));
-    setStagedPreviews((prev) => prev.filter((_, i) => i !== idx));
-  };
 
   const mut = useMutation({
-    mutationFn: async () => {
-      const space = await createSpace(form);
-      if (schedules.length > 0) await setSchedules(space.id, schedules);
-      for (let i = 0; i < stagedFiles.length; i++) {
-        await uploadSpaceImage(space.id, stagedFiles[i], i === 0);
-      }
-      return space;
-    },
+    mutationFn: () => createSpace(form),
     onSuccess: () => {
       toast.success("Espacio creado correctamente");
-      stagedPreviews.forEach((u) => URL.revokeObjectURL(u));
       qc.invalidateQueries({ queryKey: ["my-spaces"] });
       qc.invalidateQueries({ queryKey: ["spaces"] });
       onClose();
@@ -313,43 +308,6 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
             </div>
           )}
         </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-2">Horarios de disponibilidad</label>
-          <ScheduleEditor value={schedules} onChange={setSchedules2} />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-2">
-            Imágenes <span className="text-muted-foreground font-normal">(máx. 8, la primera será la principal)</span>
-          </label>
-          <div className="flex flex-wrap gap-3">
-            {stagedPreviews.map((src, idx) => (
-              <div key={idx} className="relative w-24 h-24 rounded-xl overflow-hidden border border-border group">
-                <img src={src} alt="" className="w-full h-full object-cover" />
-                {idx === 0 && (
-                  <span className="absolute top-1 left-1 text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-medium">
-                    Principal
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removeStaged(idx)}
-                  className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-            {stagedFiles.length < 8 && (
-              <label className="w-24 h-24 rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
-                <ImagePlus className="w-5 h-5 text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">Agregar</span>
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
-              </label>
-            )}
-          </div>
-        </div>
       </div>
 
       <div className="flex justify-end gap-2 mt-5">
@@ -366,338 +324,14 @@ const CreateSpaceForm = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-// ── Editor de horarios ────────────────────────────────────────────────────────
-
-const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const DEFAULT_OPEN = "08:00";
-const DEFAULT_CLOSE = "20:00";
-
-interface ScheduleEditorProps {
-  value: Omit<Schedule, "id">[];
-  onChange: (s: Omit<Schedule, "id">[]) => void;
-}
-
-const ScheduleEditor = ({ value, onChange }: ScheduleEditorProps) => {
-  const activeSet = new Set(value.map((s) => s.day_of_week));
-
-  const toggle = (day: number) => {
-    if (activeSet.has(day)) {
-      onChange(value.filter((s) => s.day_of_week !== day));
-    } else {
-      onChange([...value, { day_of_week: day, open_time: DEFAULT_OPEN, close_time: DEFAULT_CLOSE }]);
-    }
-  };
-
-  const update = (day: number, field: "open_time" | "close_time", val: string) => {
-    onChange(value.map((s) => s.day_of_week === day ? { ...s, [field]: val } : s));
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {DAY_NAMES.map((name, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => toggle(idx)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-smooth ${
-              activeSet.has(idx)
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-muted-foreground hover:bg-secondary/70"
-            }`}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
-      {value.sort((a, b) => a.day_of_week - b.day_of_week).map((s) => (
-        <div key={s.day_of_week} className="flex items-center gap-2 text-sm">
-          <span className="w-8 text-muted-foreground font-medium">{DAY_NAMES[s.day_of_week]}</span>
-          <input
-            type="time"
-            value={s.open_time}
-            onChange={(e) => update(s.day_of_week, "open_time", e.target.value)}
-            className="px-2 py-1 rounded-lg border border-border bg-background text-sm"
-          />
-          <span className="text-muted-foreground">–</span>
-          <input
-            type="time"
-            value={s.close_time}
-            onChange={(e) => update(s.day_of_week, "close_time", e.target.value)}
-            className="px-2 py-1 rounded-lg border border-border bg-background text-sm"
-          />
-        </div>
-      ))}
-      {value.length === 0 && (
-        <p className="text-xs text-muted-foreground">Sin días configurados — el espacio no tendrá horario visible.</p>
-      )}
-    </div>
-  );
-};
-
-// ── Editor de imágenes ────────────────────────────────────────────────────────
-
-interface ImageEditorProps {
-  spaceId: string;
-  images: SpaceImage[];
-  onRefresh: () => void;
-}
-
-const ImageEditor = ({ spaceId, images, onRefresh }: ImageEditorProps) => {
-  const [uploading, setUploading] = useState(false);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    setUploading(true);
-    try {
-      for (const file of files) {
-        await uploadSpaceImage(spaceId, file, images.length === 0);
-      }
-      onRefresh();
-    } catch {
-      toast.error("No se pudo subir la imagen");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleDelete = async (imageId: string) => {
-    try {
-      await deleteSpaceImage(spaceId, imageId);
-      onRefresh();
-    } catch {
-      toast.error("No se pudo eliminar la imagen");
-    }
-  };
-
-  const handleSetPrimary = async (imageId: string) => {
-    try {
-      await setPrimaryImage(spaceId, imageId);
-      onRefresh();
-    } catch {
-      toast.error("No se pudo cambiar la imagen principal");
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {images.map((img) => (
-          <div key={img.id} className="relative group w-24 h-24">
-            <img src={img.url} alt="" className="w-full h-full object-cover rounded-xl border border-border" />
-            {img.is_primary && (
-              <span className="absolute top-1 left-1 bg-primary rounded-full p-0.5">
-                <Star className="w-2.5 h-2.5 text-white fill-white" />
-              </span>
-            )}
-            <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-              {!img.is_primary && (
-                <button onClick={() => handleSetPrimary(img.id)} className="p-1 rounded-full bg-white/20 hover:bg-white/40" title="Principal">
-                  <Star className="w-3 h-3 text-white" />
-                </button>
-              )}
-              <button onClick={() => handleDelete(img.id)} className="p-1 rounded-full bg-white/20 hover:bg-red-500/80" title="Eliminar">
-                <Trash2 className="w-3 h-3 text-white" />
-              </button>
-            </div>
-          </div>
-        ))}
-        <label className={`w-24 h-24 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border cursor-pointer hover:border-primary/50 transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-          <ImagePlus className="w-5 h-5 text-muted-foreground mb-1" />
-          <span className="text-xs text-muted-foreground">{uploading ? "Subiendo…" : "Añadir"}</span>
-          <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} />
-        </label>
-      </div>
-      <p className="text-xs text-muted-foreground">Hover sobre imagen para gestionar. La principal aparece en los listados.</p>
-    </div>
-  );
-};
-
-// ── Editar espacio ─────────────────────────────────────────────────────────────
-
-const EditSpaceForm = ({ space, onClose }: { space: Space; onClose: () => void }) => {
-  const qc = useQueryClient();
-  const [form, setForm] = useState<SpaceUpdatePayload>({
-    name: space.name,
-    type: space.type,
-    description: space.description,
-    address: space.location,
-    city: space.city,
-    price_per_hour: space.price,
-    capacity: space.capacity,
-    amenities: [...space.amenities],
-  });
-  const [amenityInput, setAmenityInput] = useState("");
-  const [scheduleList, setScheduleList] = useState<Omit<Schedule, "id">[]>(
-    space.schedules.map(({ day_of_week, open_time, close_time }) => ({ day_of_week, open_time, close_time }))
-  );
-  const [localImages, setLocalImages] = useState<SpaceImage[]>(space.images);
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      const updated = await updateSpace(space.id, form);
-      await setSchedules(space.id, scheduleList);
-      return updated;
-    },
-    onSuccess: () => {
-      toast.success("Espacio actualizado");
-      qc.invalidateQueries({ queryKey: ["my-spaces"] });
-      qc.invalidateQueries({ queryKey: ["spaces"] });
-      onClose();
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar"),
-  });
-
-  const set = (field: keyof SpaceUpdatePayload, value: any) =>
-    setForm((f) => ({ ...f, [field]: value }));
-
-  const addAmenity = () => {
-    const v = amenityInput.trim();
-    if (v && !(form.amenities ?? []).includes(v)) set("amenities", [...(form.amenities ?? []), v]);
-    setAmenityInput("");
-  };
-
-  const removeAmenity = (a: string) =>
-    set("amenities", (form.amenities ?? []).filter((x) => x !== a));
-
-  const refreshImages = async () => {
-    try {
-      const { fetchSpace } = await import("@/lib/spaces");
-      const fresh = await fetchSpace(space.id);
-      setLocalImages(fresh.images);
-    } catch { /* silencioso */ }
-  };
-
-  return (
-    <div className="bg-card border border-primary/30 rounded-2xl p-6 mb-6 shadow-soft">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-lg">Editar: {space.name}</h2>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-1">Nombre *</label>
-          <input
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.name ?? ""} onChange={(e) => set("name", e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">Tipo *</label>
-          <select
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.type} onChange={(e) => set("type", e.target.value as SpaceType)}
-          >
-            {SPACE_TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">Ciudad *</label>
-          <input
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.city ?? ""} onChange={(e) => set("city", e.target.value)}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-1">Dirección *</label>
-          <input
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.address ?? ""} onChange={(e) => set("address", e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">Precio por hora (CLP) *</label>
-          <input
-            type="number" min={1000} step={1000}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.price_per_hour ?? 0} onChange={(e) => set("price_per_hour", Number(e.target.value))}
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">Capacidad (personas) *</label>
-          <input
-            type="number" min={1}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            value={form.capacity ?? 1} onChange={(e) => set("capacity", Number(e.target.value))}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-1">Descripción</label>
-          <textarea
-            rows={3}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none"
-            value={form.description ?? ""} onChange={(e) => set("description", e.target.value)}
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-1">Comodidades</label>
-          <div className="flex gap-2 mb-2">
-            <input
-              className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-sm"
-              value={amenityInput} onChange={(e) => setAmenityInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAmenity())}
-              placeholder="WiFi, Proyector, Estacionamiento…"
-            />
-            <Button type="button" variant="outline" size="sm" onClick={addAmenity}>Agregar</Button>
-          </div>
-          {(form.amenities ?? []).length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {(form.amenities ?? []).map((a) => (
-                <span key={a} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-secondary">
-                  {a}
-                  <button onClick={() => removeAmenity(a)}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-2">Horarios de disponibilidad</label>
-          <ScheduleEditor value={scheduleList} onChange={setScheduleList} />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold mb-2">Imágenes</label>
-          <ImageEditor spaceId={space.id} images={localImages} onRefresh={refreshImages} />
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2 mt-5">
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button
-          variant="hero"
-          disabled={mut.isPending || !form.name || !form.address || !form.city}
-          onClick={() => mut.mutate()}
-        >
-          {mut.isPending ? "Guardando…" : "Guardar cambios"}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 // ── Card gestión de oferta ────────────────────────────────────────────────────
 
-const SpaceOfferCard = ({ space, onEdit }: { space: Space; onEdit: () => void }) => {
+const SpaceOfferCard = ({ space }: { space: Space }) => {
   const qc = useQueryClient();
   const [active, setActive] = useState(space.discountActive);
   const [type, setType] = useState<DiscountType>(space.discountType || "percentage");
   const [value, setValue] = useState<number>(space.discountValue || 10);
   const [minPeople, setMinPeople] = useState<number>(space.discountMinPeople || 2);
-  const [isActive, setIsActive] = useState(space.available);
 
   const mut = useMutation({
     mutationFn: () =>
@@ -715,46 +349,15 @@ const SpaceOfferCard = ({ space, onEdit }: { space: Space; onEdit: () => void })
     onError: (err) => toast.error(err instanceof ApiError ? err.message : "No se pudo guardar"),
   });
 
-  const toggleActiveMut = useMutation({
-    mutationFn: (next: boolean) => updateSpace(space.id, { is_active: next }),
-    onSuccess: (_, next) => {
-      setIsActive(next);
-      toast.success(next ? "Espacio activado" : "Espacio desactivado");
-      qc.invalidateQueries({ queryKey: ["my-spaces"] });
-      qc.invalidateQueries({ queryKey: ["spaces"] });
-    },
-    onError: () => toast.error("No se pudo cambiar el estado"),
-  });
-
   const preview = active && value ? Math.round(space.price * (1 - value / 100)) : space.price;
 
   return (
-    <div className={`bg-card border rounded-2xl p-5 shadow-soft flex flex-col md:flex-row gap-4 ${isActive ? "border-border" : "border-border opacity-60"}`}>
+    <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col md:flex-row gap-4">
       <img src={space.image} alt={space.name} className="w-full md:w-40 h-32 object-cover rounded-xl" />
       <div className="flex-1">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold">{space.name}</h3>
-            {!isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">Inactivo</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
-            <button
-              onClick={() => toggleActiveMut.mutate(!isActive)}
-              disabled={toggleActiveMut.isPending}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              title={isActive ? "Desactivar espacio" : "Activar espacio"}
-            >
-              {isActive ? <ToggleRight className="w-5 h-5 text-primary" /> : <ToggleLeft className="w-5 h-5" />}
-            </button>
-            <button
-              onClick={onEdit}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              title="Editar espacio"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-          </div>
+          <h3 className="font-semibold">{space.name}</h3>
+          <span className="text-sm text-muted-foreground">{formatCLP(space.price)} / hora</span>
         </div>
 
         <div className="mt-4 space-y-3">
@@ -814,123 +417,55 @@ const SpaceOfferCard = ({ space, onEdit }: { space: Space; onEdit: () => void })
 
 // ── Card reserva entrante ─────────────────────────────────────────────────────
 
-const IncomingReservationCard = ({ reservation: r }: { reservation: IncomingReservation }) => (
-  <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col sm:flex-row sm:items-center gap-4">
-    <div className="flex-1 space-y-1">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-semibold">{r.space_name ?? "Espacio"}</span>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.status] ?? "bg-muted text-muted-foreground"}`}>
-          {STATUS_LABELS[r.status] ?? r.status}
-        </span>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {r.client_name ?? "Cliente"} &mdash; {r.client_email}
-      </p>
-      <p className="text-sm">
-        {new Date(r.date).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" })}
-        {" · "}{r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
-        {" · "}{r.hours}h · {r.num_people} persona{r.num_people !== 1 ? "s" : ""}
-      </p>
-    </div>
-    <div className="text-right shrink-0">
-      <p className="font-bold text-lg">{formatCLP(r.total)}</p>
-      <p className="text-xs text-muted-foreground">subtotal {formatCLP(r.subtotal)}</p>
-    </div>
-  </div>
-);
-
-// ── Perfil de proveedor ────────────────────────────────────────────────────────
-
-const ProviderProfileForm = () => {
-  const qc = useQueryClient();
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ["provider-profile"],
-    queryFn: async () => {
-      const res = await apiRequest<{ success: boolean; data: { bio: string | null; bank_rut: string | null; bank_account: string | null; verification_status: string } }>("/providers/me");
-      return res.data;
-    },
-  });
-
-  const [bio, setBio] = useState("");
-  const [bankRut, setBankRut] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
-
-  useEffect(() => {
-    if (profile) {
-      setBio(profile.bio ?? "");
-      setBankRut(profile.bank_rut ?? "");
-      setBankAccount(profile.bank_account ?? "");
-    }
-  }, [profile]);
-
-  const mut = useMutation({
-    mutationFn: () =>
-      apiRequest("/providers/me", {
-        method: "PATCH",
-        body: JSON.stringify({ bio: bio || null, bank_rut: bankRut || null, bank_account: bankAccount || null }),
-      }),
-    onSuccess: () => {
-      toast.success("Perfil actualizado");
-      qc.invalidateQueries({ queryKey: ["provider-profile"] });
-    },
-    onError: () => toast.error("No se pudo guardar"),
-  });
-
-  if (isLoading) return <div className="text-center py-20 text-muted-foreground">Cargando…</div>;
-
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    verified: "bg-green-100 text-green-800",
-    rejected: "bg-red-100 text-red-800",
-  };
-  const statusLabels: Record<string, string> = { pending: "Pendiente", verified: "Verificado", rejected: "Rechazado" };
-  const vs = profile?.verification_status ?? "pending";
+const IncomingReservationCard = ({
+  reservation: r,
+  onCancel,
+  cancelling,
+}: {
+  reservation: IncomingReservation;
+  onCancel: (id: string) => void;
+  cancelling: boolean;
+}) => {
+  const canCancel = r.status === "pending" || r.status === "confirmed";
 
   return (
-    <div className="max-w-xl space-y-6">
-      <div className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold">Perfil de anfitrión</h2>
-        <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${statusColors[vs] ?? "bg-muted"}`}>
-          {statusLabels[vs] ?? vs}
-        </span>
+    <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="flex-1 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold">{r.space_name ?? "Espacio"}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[r.status] ?? "bg-muted text-muted-foreground"}`}>
+            {STATUS_LABELS[r.status] ?? r.status}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {r.client_name ?? "Cliente"} &mdash; {r.client_email}
+        </p>
+        <p className="text-sm">
+          {new Date(r.date).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" })}
+          {" · "}{r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}
+          {" · "}{r.hours}h · {r.num_people} persona{r.num_people !== 1 ? "s" : ""}
+        </p>
       </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-semibold mb-1">Biografía</label>
-          <textarea
-            rows={4}
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm resize-none"
-            placeholder="Cuéntanos sobre ti y tus espacios…"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-          />
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right">
+          <p className="font-bold text-lg">{formatCLP(r.total)}</p>
+          <p className="text-xs text-muted-foreground">subtotal {formatCLP(r.subtotal)}</p>
         </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">RUT bancario</label>
-          <input
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            placeholder="12.345.678-9"
-            value={bankRut}
-            onChange={(e) => setBankRut(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold mb-1">Número de cuenta</label>
-          <input
-            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm"
-            placeholder="00-123-45678-01"
-            value={bankAccount}
-            onChange={(e) => setBankAccount(e.target.value)}
-          />
-        </div>
+        {canCancel && (
+          <button
+            onClick={() => {
+              if (confirm(`¿Cancelar la reserva de ${r.client_name ?? "este cliente"}?`)) {
+                onCancel(r.id);
+              }
+            }}
+            disabled={cancelling}
+            title="Cancelar reserva"
+            className="p-2 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-smooth disabled:opacity-50"
+          >
+            <Ban className="w-4 h-4" />
+          </button>
+        )}
       </div>
-
-      <Button variant="hero" disabled={mut.isPending} onClick={() => mut.mutate()}>
-        {mut.isPending ? "Guardando…" : "Guardar perfil"}
-      </Button>
     </div>
   );
 };

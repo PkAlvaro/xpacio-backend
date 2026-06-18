@@ -70,29 +70,6 @@ export async function apiRequest<T>(
   return res.json();
 }
 
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const BASE = import.meta.env.VITE_API_URL ?? "/api/v1";
-  const url = `${BASE}${path}`;
-  const headers: Record<string, string> = {};
-  if (_accessToken) headers["Authorization"] = `Bearer ${_accessToken}`;
-
-  let res = await fetch(url, { method: "POST", body: formData, headers, credentials: "include" });
-
-  if (res.status === 401) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      headers["Authorization"] = `Bearer ${newToken}`;
-      res = await fetch(url, { method: "POST", body: formData, headers, credentials: "include" });
-    }
-  }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? "Error desconocido", body);
-  }
-  return res.json();
-}
-
 export class ApiError extends Error {
   constructor(
     public status: number,

@@ -129,7 +129,6 @@ export interface SpaceFilters {
   q?: string;
   min_price?: number;
   max_price?: number;
-  min_capacity?: number;
   page?: number;
   page_size?: number;
 }
@@ -147,10 +146,8 @@ export interface TimeSlot {
 export interface Reservation {
   id: string;
   space_id: string;
-  space_name?: string | null;
   client_id: string;
   date: string;
-  end_date?: string | null;
   start_time: string;
   end_time: string;
   hours: number;
@@ -259,7 +256,56 @@ export interface AdminUserListItem {
   name: string;
   email: string;
   role: UserRole;
+  is_active: boolean;
   phone?: string;
+  created_at: string;
+}
+
+export interface AdminReservationItem {
+  id: string;
+  space_id: string;
+  space_name: string | null;
+  client_id: string;
+  client_name: string | null;
+  client_email: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  hours: number;
+  num_people: number;
+  subtotal: number;
+  service_fee: number;
+  total: number;
+  status: string;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  created_at: string;
+}
+
+export type DisputeStatus = "open" | "under_review" | "resolved_refund" | "resolved_rejected";
+
+export interface DisputeEvidence {
+  id: string;
+  url: string;
+  filename: string | null;
+  uploaded_at: string;
+}
+
+export interface DisputeItem {
+  id: string;
+  reservation_id: string;
+  opened_by: string;
+  opener_name: string | null;
+  opener_email: string | null;
+  space_name: string | null;
+  reason: string;
+  status: DisputeStatus;
+  admin_notes: string | null;
+  refund_amount: number | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  evidence: DisputeEvidence[];
+  created_at: string;
 }
 
 // --- API envelope ---
