@@ -166,6 +166,23 @@ const SpaceDetail = () => {
             <p className="text-muted-foreground leading-relaxed">{space.description ?? "Sin descripción."}</p>
           </section>
 
+          {space.host && (
+            <section>
+              <h2 className="font-display text-2xl font-semibold mb-4">Anfitrión</h2>
+              <div className="flex items-center gap-4 p-4 rounded-2xl border border-border bg-card">
+                <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xl font-bold shrink-0 select-none">
+                  {space.host.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold">{space.host.name}</p>
+                  {space.host.bio && (
+                    <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{space.host.bio}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           {space.amenities.length > 0 && (
             <section>
               <h2 className="font-display text-2xl font-semibold mb-4">Servicios incluidos</h2>

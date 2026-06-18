@@ -53,6 +53,11 @@ export interface SpaceSchedule {
   close_time: string;
 }
 
+export interface SpaceHost {
+  name: string;
+  bio?: string;
+}
+
 export interface SpaceDetail {
   id: string;
   slug?: string;
@@ -79,6 +84,7 @@ export interface SpaceDetail {
   discount_active?: boolean;
   discount_min_people?: number;
   discounted_price?: number;
+  host?: SpaceHost;
 }
 
 export interface SubSpaceItem {
