@@ -38,6 +38,34 @@ export function useOpenDispute() {
   });
 }
 
+export function useOpenProviderDispute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reservationId, reason, files }: { reservationId: string; reason: string; files: File[] }) => {
+      const form = new FormData();
+      form.append("reason", reason);
+      files.forEach(f => form.append("files", f));
+      const token = getAccessToken();
+      return fetch(
+        `${import.meta.env.VITE_API_URL ?? "/api/v1"}/reservations/${reservationId}/provider-dispute`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: form,
+        }
+      ).then(async r => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json?.detail ?? "Error al enviar reclamación");
+        return json;
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["provider", "disputes"] });
+      qc.invalidateQueries({ queryKey: ["incoming-reservations"] });
+    },
+  });
+}
+
 export function useProviderDisputes() {
   return useQuery({
     queryKey: ["provider", "disputes"],

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Tag, Plus, X, CalendarCheck, Ban, Pencil, Images, AlertCircle } from "lucide-react";
+import { Tag, Plus, X, CalendarCheck, Ban, Pencil, Images, AlertCircle, MessageSquareWarning } from "lucide-react";
 import {
   fetchMySpaces, updateSpaceOffer, fetchIncomingReservations,
   providerCancelReservation,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/spaces";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/hooks/useAuth";
-import { useProviderDisputes } from "@/hooks/useDisputes";
+import { useProviderDisputes, useOpenProviderDispute } from "@/hooks/useDisputes";
 import type { DisputeItem } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 const MySpaces = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"spaces" | "reservations" | "disputes">("spaces");
+  const [disputingReservationId, setDisputingReservationId] = useState<string | null>(null);
   const [reservationStatus, setReservationStatus] = useState<string | undefined>(undefined);
   const { data: me, isLoading: meLoading } = useMe();
 
@@ -196,11 +197,19 @@ const MySpaces = () => {
                   reservation={r}
                   onCancel={(id) => cancelMut.mutate({ id })}
                   cancelling={cancelMut.isPending}
+                  onDispute={(id) => setDisputingReservationId(id)}
                 />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {disputingReservationId && (
+        <ProviderDisputeModal
+          reservationId={disputingReservationId}
+          onClose={() => setDisputingReservationId(null)}
+        />
       )}
     </div>
   );
@@ -357,16 +366,27 @@ const SpaceOfferCard = ({ space }: { space: Space }) => {
 
 // ── Card reserva entrante ─────────────────────────────────────────────────────
 
+const DISPUTE_WINDOW_DAYS = 3;
+
+function isWithinDisputeWindow(endDate: string, endTime: string): boolean {
+  const end = new Date(`${endDate}T${endTime}`);
+  const diffMs = Date.now() - end.getTime();
+  return diffMs >= 0 && diffMs <= DISPUTE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
 const IncomingReservationCard = ({
   reservation: r,
   onCancel,
   cancelling,
+  onDispute,
 }: {
   reservation: IncomingReservation;
   onCancel: (id: string) => void;
   cancelling: boolean;
+  onDispute: (id: string) => void;
 }) => {
   const canCancel = r.status === "pending" || r.status === "confirmed";
+  const canDispute = r.status === "finished" && isWithinDisputeWindow(r.date, r.end_time);
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 shadow-soft flex flex-col sm:flex-row sm:items-center gap-4">
@@ -391,6 +411,15 @@ const IncomingReservationCard = ({
           <p className="font-bold text-lg">{formatCLP(r.total)}</p>
           <p className="text-xs text-muted-foreground">subtotal {formatCLP(r.subtotal)}</p>
         </div>
+        {canDispute && (
+          <button
+            onClick={() => onDispute(r.id)}
+            title="Abrir reclamación"
+            className="p-2 rounded-xl hover:bg-orange-100 text-muted-foreground hover:text-orange-700 dark:hover:bg-orange-900/20 dark:hover:text-orange-400 transition-smooth"
+          >
+            <MessageSquareWarning className="w-4 h-4" />
+          </button>
+        )}
         {canCancel && (
           <button
             onClick={() => {
@@ -483,6 +512,91 @@ const ProviderDisputeCard = ({ dispute: d }: { dispute: DisputeItem }) => {
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+// ── Modal disputa anfitrión ───────────────────────────────────────────────────
+
+const ProviderDisputeModal = ({
+  reservationId,
+  onClose,
+}: {
+  reservationId: string;
+  onClose: () => void;
+}) => {
+  const [reason, setReason] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const openDispute = useOpenProviderDispute();
+
+  const handleSubmit = async () => {
+    if (reason.trim().length < 20) {
+      toast.error("El motivo debe tener al menos 20 caracteres");
+      return;
+    }
+    try {
+      await openDispute.mutateAsync({ reservationId, reason: reason.trim(), files });
+      toast.success("Reclamación enviada al equipo de Xpacio");
+      onClose();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Error al enviar reclamación");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-lg font-bold flex items-center gap-2">
+            <MessageSquareWarning className="w-5 h-5 text-orange-500" /> Abrir reclamación
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          Describe el problema con el cliente (daños, mal comportamiento, etc.). El equipo de Xpacio revisará la reclamación.
+        </p>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Motivo <span className="text-muted-foreground font-normal">(mínimo 20 caracteres)</span></label>
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={4}
+            placeholder="Ej: El cliente dejó el espacio con daños en la pared y se llevó el equipo de sonido…"
+            className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 ring-primary/20 resize-none"
+          />
+          <p className="text-xs text-muted-foreground mt-1 text-right">{reason.length}/20 mín.</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold mb-1">Evidencia <span className="text-muted-foreground font-normal">(fotos opcionales)</span></label>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={e => setFiles(Array.from(e.target.files ?? []))}
+            className="text-sm text-muted-foreground"
+          />
+          {files.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">{files.length} imagen{files.length > 1 ? "es" : ""} seleccionada{files.length > 1 ? "s" : ""}</p>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Cancelar</Button>
+          <Button
+            variant="hero"
+            className="flex-1"
+            disabled={reason.trim().length < 20 || openDispute.isPending}
+            onClick={handleSubmit}
+          >
+            {openDispute.isPending ? "Enviando…" : "Enviar reclamación"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };
