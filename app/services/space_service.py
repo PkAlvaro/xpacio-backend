@@ -641,17 +641,53 @@ async def set_primary_image(space_id: uuid.UUID, image_id: uuid.UUID, session: A
 
 
 async def admin_stats(session: AsyncSession) -> dict:
+    from datetime import date, timedelta
+    from sqlalchemy import cast, Date as SADate
     from app.models.reservation import Reservation
+    from app.models.payment import Payment
+    from app.models.dispute import Dispute
     from app.models.user import User
+    from app.constants import PaymentStatus, DisputeStatus, ReservationStatus
 
     total_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.parent_id.is_(None)))).scalar_one()
     active_spaces = (await session.execute(select(func.count()).select_from(Space).where(Space.is_active.is_(True), Space.parent_id.is_(None)))).scalar_one()
     total_users = (await session.execute(select(func.count()).select_from(User))).scalar_one()
     total_reservations = (await session.execute(select(func.count()).select_from(Reservation))).scalar_one()
 
+    revenue_row = await session.execute(
+        select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.status == PaymentStatus.PAID)
+    )
+    total_revenue = revenue_row.scalar_one()
+
+    thirty_days_ago = date.today() - timedelta(days=29)
+    revenue_30d_row = await session.execute(
+        select(func.coalesce(func.sum(Payment.amount), 0))
+        .where(Payment.status == PaymentStatus.PAID, cast(Payment.created_at, SADate) >= thirty_days_ago)
+    )
+    revenue_30d = revenue_30d_row.scalar_one()
+
+    pending_disputes = (await session.execute(
+        select(func.count()).select_from(Dispute).where(Dispute.status.in_([DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW]))
+    )).scalar_one()
+
+    daily_rows = await session.execute(
+        select(
+            cast(Reservation.created_at, SADate).label("day"),
+            func.count().label("count"),
+        )
+        .where(cast(Reservation.created_at, SADate) >= thirty_days_ago)
+        .group_by(cast(Reservation.created_at, SADate))
+        .order_by(cast(Reservation.created_at, SADate))
+    )
+    daily_data = [{"date": str(row.day), "reservations": row.count} for row in daily_rows]
+
     return {
         "total_spaces": total_spaces,
         "active_spaces": active_spaces,
         "total_users": total_users,
         "total_reservations": total_reservations,
+        "total_revenue": total_revenue,
+        "revenue_30d": revenue_30d,
+        "pending_disputes": pending_disputes,
+        "daily_reservations": daily_data,
     }

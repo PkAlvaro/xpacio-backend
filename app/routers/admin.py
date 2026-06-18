@@ -14,7 +14,9 @@ from app.schemas.space import AdminSpaceCreate, AdminSpaceUpdate, SpaceImageOut,
 from app.exceptions import NotFoundError, DomainException
 from app.constants import UserRole, ReservationStatus
 from app.schemas.reservation import ReservationCancel
+from app.schemas.system_config import SystemConfigOut, SystemConfigUpdate
 from app.services import auth_service, space_service, reservation_service
+from app.services.config_service import get_config as _get_config, update_config as _update_config
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -252,3 +254,38 @@ async def admin_cancel_reservation(
     from app.schemas.reservation import ReservationResponse
     reservation = await reservation_service.admin_cancel_reservation(reservation_id, data.reason, session)
     return {"success": True, "data": ReservationResponse.model_validate(reservation).model_dump()}
+
+
+@router.get("/config", response_model=dict, dependencies=_admin_dep, summary="Ver configuración global")
+async def get_system_config(session: AsyncSession = Depends(get_session)):
+    config = await _get_config(session)
+    return {"success": True, "data": SystemConfigOut.model_validate(config).model_dump()}
+
+
+@router.patch("/config", response_model=dict, dependencies=_admin_dep, summary="Actualizar configuración global")
+async def update_system_config(
+    data: SystemConfigUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    config = await _update_config(session, **data.model_dump(exclude_none=True))
+    return {"success": True, "data": SystemConfigOut.model_validate(config).model_dump()}
+
+
+@router.get("/health", response_model=dict, dependencies=_admin_dep, summary="Health check desde admin")
+async def admin_health(
+    session: AsyncSession = Depends(get_session),
+    redis=Depends(get_redis),
+):
+    from sqlalchemy import text
+    checks: dict[str, str] = {}
+    try:
+        await session.execute(text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception:
+        checks["db"] = "fail"
+    try:
+        await redis.ping()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "fail"
+    return {"success": True, "data": {"status": "healthy" if all(v == "ok" for v in checks.values()) else "degraded", "checks": checks}}
