@@ -1,13 +1,15 @@
 import { useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Save, Upload, Trash2, Star, Plus, X, Check } from "lucide-react";
+import { ArrowLeft, Save, Plus, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   useAdminSpace, useCreateAdminSpace, useUpdateAdminSpace,
   useUploadImage, useDeleteImage, useSetPrimaryImage, useSetAdminSchedules,
+  useReorderAdminImages,
 } from "@/hooks/useAdmin";
+import { ImageOrderManager } from "@/components/ImageOrderManager";
 import type { SpaceType } from "@/types/api";
 
 const TYPES: SpaceType[] = ["Oficina", "Cancha", "Sala", "Salón", "Estudio", "Terraza"];
@@ -32,9 +34,8 @@ export default function SpaceEditor() {
   const uploadImage = useUploadImage();
   const deleteImage = useDeleteImage();
   const setPrimary = useSetPrimaryImage();
+  const reorderImages = useReorderAdminImages();
   const setSchedules = useSetAdminSchedules();
-
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [form, setForm] = useState({
@@ -107,16 +108,6 @@ export default function SpaceEditor() {
     } catch (err: any) {
       toast.error(err?.message ?? "Error al guardar horarios");
     }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (!id) { toast.error("Guarda el espacio primero"); return; }
-    for (const file of files) {
-      await uploadImage.mutateAsync({ spaceId: id, file });
-    }
-    toast.success(`${files.length} imagen${files.length > 1 ? "es" : ""} subida${files.length > 1 ? "s" : ""}`);
-    if (fileRef.current) fileRef.current.value = "";
   };
 
   const addAmenity = () => {
@@ -246,58 +237,18 @@ export default function SpaceEditor() {
 
       {/* Tab: Imágenes */}
       {tab === 1 && (
-        <div className="space-y-5">
-          {isNew && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-700 dark:text-yellow-400">
-              Guarda el espacio primero (tab "Info básica") para poder subir imágenes.
-            </div>
-          )}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Fotos del espacio</h3>
-              <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={isNew || uploadImage.isPending}>
-                <Upload className="w-4 h-4" /> Subir imágenes
-              </Button>
-              <input ref={fileRef} type="file" multiple accept="image/*" className="hidden" onChange={handleFileUpload} />
-            </div>
-
-            {images.length === 0 ? (
-              <div className="border-2 border-dashed border-border rounded-2xl p-16 text-center text-muted-foreground cursor-pointer hover:border-primary/50 transition-smooth"
-                onClick={() => !isNew && fileRef.current?.click()}>
-                <Upload className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                <p className="text-sm">Arrastra imágenes aquí o haz clic para seleccionar</p>
-                <p className="text-xs opacity-60 mt-1">JPG, PNG, WebP — máx 20MB</p>
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {images.map(img => (
-                  <div key={img.id} className="relative group aspect-square rounded-xl overflow-hidden border border-border">
-                    <img src={img.url} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-smooth flex items-center justify-center gap-2">
-                      <button onClick={() => setPrimary.mutateAsync({ spaceId: id!, imageId: img.id })}
-                        title="Marcar como principal"
-                        className="p-2 rounded-full bg-white/20 hover:bg-white/40 transition-smooth">
-                        <Star className={cn("w-4 h-4", img.is_primary ? "fill-yellow-400 text-yellow-400" : "text-white")} />
-                      </button>
-                      <button onClick={() => deleteImage.mutateAsync({ spaceId: id!, imageId: img.id })}
-                        className="p-2 rounded-full bg-white/20 hover:bg-red-500/60 transition-smooth">
-                        <Trash2 className="w-4 h-4 text-white" />
-                      </button>
-                    </div>
-                    {img.is_primary && (
-                      <span className="absolute top-2 left-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded-full">Principal</span>
-                    )}
-                  </div>
-                ))}
-                <button onClick={() => fileRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary transition-smooth">
-                  <Plus className="w-6 h-6" />
-                  <span className="text-xs">Agregar</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <ImageOrderManager
+          spaceId={id}
+          images={images}
+          uploading={uploadImage.isPending}
+          onUpload={async (files) => {
+            for (const file of files) await uploadImage.mutateAsync({ spaceId: id!, file });
+            toast.success(`${files.length} imagen${files.length > 1 ? "es" : ""} subida${files.length > 1 ? "s" : ""}`);
+          }}
+          onDelete={(imageId) => deleteImage.mutateAsync({ spaceId: id!, imageId })}
+          onSetPrimary={(imageId) => setPrimary.mutateAsync({ spaceId: id!, imageId })}
+          onReorder={(order) => reorderImages.mutateAsync({ spaceId: id!, order })}
+        />
       )}
 
       {/* Tab: Amenities */}

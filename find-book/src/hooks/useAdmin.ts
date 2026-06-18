@@ -103,6 +103,15 @@ export function useSetPrimaryImage() {
   });
 }
 
+export function useReorderAdminImages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ spaceId, order }: { spaceId: string; order: { id: string; display_order: number }[] }) =>
+      apiRequest(`/admin/spaces/${spaceId}/images/order`, { method: "PATCH", body: JSON.stringify(order) }),
+    onSuccess: (_, { spaceId }) => qc.invalidateQueries({ queryKey: ["admin", "spaces", spaceId] }),
+  });
+}
+
 // ── Schedules ──────────────────────────────────────────────────────────────
 export function useSetAdminSchedules() {
   const qc = useQueryClient();
