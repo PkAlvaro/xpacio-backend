@@ -19,6 +19,7 @@ const Login = lazy(() => import("./pages/Auth").then(m => ({ default: m.Login })
 const Register = lazy(() => import("./pages/Auth").then(m => ({ default: m.Register })));
 
 const MySpaces = lazy(() => import("./pages/MySpaces"));
+const ProviderSpaceEditor = lazy(() => import("./pages/ProviderSpaceEditor"));
 const PaymentReturn = lazy(() => import("./pages/PaymentReturn").then(m => ({ default: m.PaymentReturn })));
 const PaymentSuccess = lazy(() => import("./pages/PaymentReturn").then(m => ({ default: m.PaymentSuccess })));
 const PaymentCancelled = lazy(() => import("./pages/PaymentReturn").then(m => ({ default: m.PaymentCancelled })));
@@ -58,6 +59,8 @@ const App = () => (
                 <Route path="/pago" element={<Payment />} />
                 <Route path="/mis-reservas" element={<MyReservations />} />
                 <Route path="/mis-espacios" element={<MySpaces />} />
+                <Route path="/mis-espacios/nuevo" element={<ProviderSpaceEditor />} />
+                <Route path="/mis-espacios/:id/editar" element={<ProviderSpaceEditor />} />
                 <Route path="/reserva/confirmacion" element={<PaymentConfirmation />} />
                 <Route path="/pago/retorno" element={<PaymentReturn />} />
                 <Route path="/pago/exito" element={<PaymentSuccess />} />
