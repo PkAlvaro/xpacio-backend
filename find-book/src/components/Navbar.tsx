@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Building2, Menu, User, LayoutDashboard, LogOut } from "lucide-react";
+import { Building2, Menu, User, LayoutDashboard, LogOut, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -66,6 +66,15 @@ export const Navbar = () => {
               </button>
               {userMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-xl shadow-lg py-1 z-50">
+                  {user.role === "provider" && (
+                    <Link
+                      to="/mis-espacios"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-secondary transition-smooth"
+                    >
+                      <Home className="w-4 h-4" /> Panel Anfitrión
+                    </Link>
+                  )}
                   {user.role === "admin" && (
                     <Link
                       to="/admin"
@@ -109,6 +118,12 @@ export const Navbar = () => {
             {!isLoading && user ? (
               <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-border">
                 <p className="px-4 py-1 text-xs text-muted-foreground">{user.email}</p>
+                {user.role === "provider" && (
+                  <Link to="/mis-espacios" onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm hover:bg-secondary">
+                    <Home className="w-4 h-4" /> Panel Anfitrión
+                  </Link>
+                )}
                 {user.role === "admin" && (
                   <Link to="/admin" onClick={() => setOpen(false)}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm hover:bg-secondary">
