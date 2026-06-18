@@ -45,7 +45,7 @@ const MySpaces = () => {
   const { data: spaces = [], isLoading: loadingSpaces } = useQuery({
     queryKey: ["my-spaces"],
     queryFn: fetchMySpaces,
-    enabled: !!me,
+    retry: false,
   });
 
   const { data: incoming = [], isLoading: loadingIncoming } = useQuery({
