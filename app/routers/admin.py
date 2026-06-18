@@ -7,13 +7,14 @@ import redis.asyncio as aioredis
 
 from app.database import get_session
 from app.dependencies import require_role, get_redis
-from app.constants import UserRole
 from app.models.user import User
 from app.models.provider import Provider
 from app.schemas.auth import ChangeRoleRequest, ToggleActiveRequest, UserResponse
 from app.schemas.space import AdminSpaceCreate, AdminSpaceUpdate, SpaceImageOut, SpaceResponse, SpaceScheduleOut, ScheduleCreate
 from app.exceptions import NotFoundError, DomainException
-from app.services import auth_service, space_service
+from app.constants import UserRole, ReservationStatus
+from app.schemas.reservation import ReservationCancel
+from app.services import auth_service, space_service, reservation_service
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -35,9 +36,10 @@ Retorna todos los usuarios del sistema con paginación.
 async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(default=None, description="Buscar por nombre o email"),
     session: AsyncSession = Depends(get_session),
 ):
-    users, total = await auth_service.list_users(session, page, page_size)
+    users, total = await auth_service.list_users(session, page, page_size, q)
     return {
         "success": True,
         "data": [UserResponse.model_validate(u).model_dump() for u in users],
@@ -225,3 +227,28 @@ async def admin_set_schedules(
 ):
     result = await space_service.set_schedules(space_id, schedules, user.id, session, skip_owner_check=True)
     return {"success": True, "data": [SpaceScheduleOut.model_validate(s).model_dump() for s in result]}
+
+
+# ── Admin: Reservaciones ───────────────────────────────────────────────────────
+
+@router.get("/reservations", response_model=dict, dependencies=_admin_dep, summary="Listar todas las reservas (admin)")
+async def admin_list_reservations(
+    status: str | None = Query(default=None, description="Filtrar por estado"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+):
+    status_enum = ReservationStatus(status) if status else None
+    items, total = await reservation_service.admin_list_reservations(session, status_enum, page, page_size)
+    return {"success": True, "data": items, "meta": {"total": total, "page": page, "page_size": page_size}}
+
+
+@router.post("/reservations/{reservation_id}/cancel", response_model=dict, dependencies=_admin_dep, summary="Cancelar reserva (admin)")
+async def admin_cancel_reservation(
+    reservation_id: uuid.UUID,
+    data: ReservationCancel = ReservationCancel(),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.schemas.reservation import ReservationResponse
+    reservation = await reservation_service.admin_cancel_reservation(reservation_id, data.reason, session)
+    return {"success": True, "data": ReservationResponse.model_validate(reservation).model_dump()}

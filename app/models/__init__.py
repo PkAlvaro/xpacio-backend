@@ -4,6 +4,7 @@ from app.models.provider import Provider
 from app.models.space import Space, SpaceSchedule, SpaceImage, SpaceAmenity
 from app.models.reservation import Reservation, Review, Favorite
 from app.models.payment import Payment
+from app.models.dispute import Dispute, DisputeEvidence
 
 __all__ = [
     "Base",
@@ -17,4 +18,6 @@ __all__ = [
     "Review",
     "Favorite",
     "Payment",
+    "Dispute",
+    "DisputeEvidence",
 ]

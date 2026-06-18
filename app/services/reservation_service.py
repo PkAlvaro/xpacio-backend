@@ -153,7 +153,6 @@ async def cancel_reservation(
     reservation = await _get_or_raise(reservation_id, session, for_update=True)
 
     if str(reservation.client_id) != str(user_id):
-        # allow provider too — covered by caller
         raise ForbiddenError("No puedes cancelar esta reserva")
 
     if reservation.status not in (ReservationStatus.PENDING, ReservationStatus.CONFIRMED):
@@ -167,6 +166,44 @@ async def cancel_reservation(
     reservation.google_event_id = None
     await session.commit()
     logger.info("reservation_cancelled", id=str(reservation_id))
+
+    if event_id:
+        await calendar_service.delete_event(event_id)
+
+    return reservation
+
+
+async def provider_cancel_reservation(
+    reservation_id: uuid.UUID,
+    provider_user_id: uuid.UUID,
+    reason: str | None,
+    session: AsyncSession,
+) -> Reservation:
+    from app.models.provider import Provider
+
+    reservation = await _get_or_raise(reservation_id, session, for_update=True)
+
+    space_result = await session.execute(select(Space).where(Space.id == reservation.space_id))
+    space = space_result.scalar_one_or_none()
+    if not space:
+        raise NotFoundError("Espacio")
+
+    prov_result = await session.execute(select(Provider).where(Provider.user_id == provider_user_id))
+    provider = prov_result.scalar_one_or_none()
+    if not provider or str(space.provider_id) != str(provider.id):
+        raise ForbiddenError("No eres el anfitrión de este espacio")
+
+    if reservation.status not in (ReservationStatus.PENDING, ReservationStatus.CONFIRMED):
+        raise DomainException(f"No se puede cancelar una reserva en estado '{reservation.status}'")
+
+    event_id = reservation.google_event_id
+    now = now_chile()
+    reservation.status = ReservationStatus.CANCELLED
+    reservation.cancelled_at = now
+    reservation.cancellation_reason = reason
+    reservation.google_event_id = None
+    await session.commit()
+    logger.info("provider_cancelled_reservation", id=str(reservation_id), provider=str(provider_user_id))
 
     if event_id:
         await calendar_service.delete_event(event_id)
@@ -243,6 +280,65 @@ async def list_incoming_reservations(
         d["client_email"] = row[3]
         out.append(d)
     return out
+
+
+async def admin_list_reservations(
+    session: AsyncSession,
+    status: ReservationStatus | None = None,
+    page: int = 1,
+    page_size: int = 30,
+) -> tuple[list[dict], int]:
+    from app.models.space import Space
+    from app.models.user import User
+    from sqlalchemy import func
+
+    base = (
+        select(Reservation, Space.name.label("space_name"), User.name.label("client_name"), User.email.label("client_email"))
+        .join(Space, Reservation.space_id == Space.id)
+        .join(User, Reservation.client_id == User.id)
+    )
+    if status:
+        base = base.where(Reservation.status == status)
+
+    count_q = select(func.count()).select_from(
+        select(Reservation).where(Reservation.status == status).subquery() if status
+        else select(Reservation).subquery()
+    )
+    total = (await session.execute(count_q)).scalar_one()
+
+    rows_q = base.order_by(Reservation.date.desc()).offset((page - 1) * page_size).limit(page_size)
+    rows = (await session.execute(rows_q)).all()
+
+    out = []
+    for row in rows:
+        r = row[0]
+        d = {c.name: getattr(r, c.name) for c in r.__table__.columns}
+        d["space_name"] = row[1]
+        d["client_name"] = row[2]
+        d["client_email"] = row[3]
+        out.append(d)
+    return out, total
+
+
+async def admin_cancel_reservation(
+    reservation_id: uuid.UUID,
+    reason: str | None,
+    session: AsyncSession,
+) -> Reservation:
+    reservation = await _get_or_raise(reservation_id, session, for_update=True)
+    if reservation.status not in (ReservationStatus.PENDING, ReservationStatus.CONFIRMED):
+        raise DomainException(f"No se puede cancelar una reserva en estado '{reservation.status}'")
+    event_id = reservation.google_event_id
+    now = now_chile()
+    reservation.status = ReservationStatus.CANCELLED
+    reservation.cancelled_at = now
+    reservation.cancellation_reason = reason
+    reservation.google_event_id = None
+    await session.commit()
+    logger.info("admin_cancelled_reservation", id=str(reservation_id))
+    if event_id:
+        await calendar_service.delete_event(event_id)
+    return reservation
 
 
 async def _get_or_raise(reservation_id: uuid.UUID, session: AsyncSession, for_update: bool = False) -> Reservation:

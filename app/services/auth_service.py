@@ -1,7 +1,7 @@
 import uuid
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.exc import IntegrityError
 import redis.asyncio as aioredis
 
@@ -147,12 +147,21 @@ async def update_profile(
     return user
 
 
-async def list_users(session: AsyncSession, page: int = 1, page_size: int = 20) -> tuple[list[User], int]:
+async def list_users(
+    session: AsyncSession,
+    page: int = 1,
+    page_size: int = 20,
+    q: str | None = None,
+) -> tuple[list[User], int]:
     from sqlalchemy import func
-    count_result = await session.execute(select(func.count()).select_from(User))
+    base = select(User)
+    if q:
+        pattern = f"%{q}%"
+        base = base.where(or_(User.name.ilike(pattern), User.email.ilike(pattern)))
+    count_result = await session.execute(select(func.count()).select_from(base.subquery()))
     total = count_result.scalar_one()
     result = await session.execute(
-        select(User).order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        base.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
     )
     return result.scalars().all(), total
 

@@ -17,7 +17,7 @@ from app.exceptions import (
     integrity_error_handler,
     generic_exception_handler,
 )
-from app.routers import health, auth, spaces, reservations, admin, providers, reviews
+from app.routers import health, auth, spaces, reservations, admin, providers, reviews, disputes
 from app.routers.payments import router_stripe, router_transbank, router_shared as router_payments_shared
 
 configure_logging()
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(providers.router)
     app.include_router(admin.router)
     app.include_router(reviews.router)
+    app.include_router(disputes.router)
 
     return app
 

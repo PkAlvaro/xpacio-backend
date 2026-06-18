@@ -58,6 +58,14 @@ class DiscountType(StrEnum):
     VOLUME = "volume"          # descuento porcentual si num_people >= discount_min_people
 
 
+class DisputeStatus(StrEnum):
+    OPEN = "open"
+    UNDER_REVIEW = "under_review"
+    RESOLVED_REFUND = "resolved_refund"
+    RESOLVED_REJECTED = "resolved_rejected"
+
+
+DISPUTE_WINDOW_DAYS = 3
 PENDING_RESERVATION_TTL_MINUTES = 15
 GEO_CACHE_TTL_DAYS = 30
 AVAILABILITY_CACHE_TTL_SECONDS = 60

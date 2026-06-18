@@ -182,6 +182,28 @@ async def cancel_reservation(
     return {"success": True, "data": ReservationResponse.model_validate(reservation).model_dump()}
 
 
+@router.post(
+    "/reservations/{reservation_id}/provider-cancel",
+    response_model=dict,
+    summary="Cancelar reserva como anfitrión",
+    description="""
+Permite al anfitrión cancelar una reserva de su espacio.
+
+Solo funciona para reservas en estado `pending` o `confirmed`.
+
+**Requiere autenticación con rol `provider` o `admin`.**
+""",
+)
+async def provider_cancel_reservation(
+    reservation_id: uuid.UUID,
+    data: ReservationCancel = ReservationCancel(),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    reservation = await reservation_service.provider_cancel_reservation(reservation_id, user.id, data.reason, session)
+    return {"success": True, "data": ReservationResponse.model_validate(reservation).model_dump()}
+
+
 @router.get(
     "/reservations/{reservation_id}/calendar",
     response_model=dict,
