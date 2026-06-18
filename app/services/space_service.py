@@ -11,6 +11,7 @@ import redis.asyncio as aioredis
 
 from app.models.space import Space, SpaceSchedule, SpaceImage, SpaceAmenity
 from app.models.provider import Provider
+from app.models.user import User
 from app.schemas.space import SpaceCreate, SpaceUpdate, SpaceFilters, ScheduleCreate, SpaceListItem
 from app.constants import DiscountType
 from app.exceptions import NotFoundError, ForbiddenError
@@ -73,6 +74,7 @@ async def _load_space(session: AsyncSession, space_id: uuid.UUID) -> Space:
             selectinload(Space.images),
             selectinload(Space.schedules),
             selectinload(Space.amenities),
+            selectinload(Space.provider).selectinload(Provider.user),
         )
         .where(Space.id == space_id)
     )
@@ -128,7 +130,12 @@ async def get_space(space_id: uuid.UUID, session: AsyncSession) -> Space:
 async def get_space_by_slug(slug: str, session: AsyncSession) -> Space:
     result = await session.execute(
         select(Space)
-        .options(selectinload(Space.images), selectinload(Space.schedules), selectinload(Space.amenities))
+        .options(
+            selectinload(Space.images),
+            selectinload(Space.schedules),
+            selectinload(Space.amenities),
+            selectinload(Space.provider).selectinload(Provider.user),
+        )
         .where(Space.slug == slug)
     )
     space = result.scalar_one_or_none()

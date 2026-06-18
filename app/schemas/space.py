@@ -104,6 +104,12 @@ class SpaceUpdate(BaseModel):
         return self
 
 
+class HostOut(BaseModel):
+    name: str
+    bio: str | None = None
+    model_config = {"from_attributes": True}
+
+
 class SpaceImageOut(BaseModel):
     id: uuid.UUID
     url: str
@@ -139,6 +145,7 @@ class SpaceResponse(BaseModel):
     images: list[SpaceImageOut] = []
     schedules: list[SpaceScheduleOut] = []
     amenities: list[str] = []
+    host: HostOut | None = None
     model_config = {"from_attributes": True}
 
     @field_validator("amenities", mode="before")

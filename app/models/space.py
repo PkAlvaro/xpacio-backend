@@ -45,6 +45,15 @@ class Space(Base, TimestampMixin):
 
     provider = relationship("Provider", back_populates="spaces")
     schedules = relationship("SpaceSchedule", back_populates="space", cascade="all, delete-orphan")
+
+    @property
+    def host(self):
+        try:
+            if self.provider and self.provider.user:
+                return {"name": self.provider.user.name, "bio": self.provider.bio}
+        except Exception:
+            pass
+        return None
     images = relationship("SpaceImage", back_populates="space", cascade="all, delete-orphan", order_by="SpaceImage.display_order")
     amenities = relationship("SpaceAmenity", back_populates="space", cascade="all, delete-orphan")
     reservations = relationship("Reservation", back_populates="space")
