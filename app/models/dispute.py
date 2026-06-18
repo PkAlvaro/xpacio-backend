@@ -13,7 +13,7 @@ class Dispute(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
     reservation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("reservations.id"), nullable=False, unique=True, index=True
+        UUID(as_uuid=True), ForeignKey("reservations.id"), nullable=False, index=True
     )
     opened_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)

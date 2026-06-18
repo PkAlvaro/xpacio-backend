@@ -9,6 +9,7 @@ from app.models.dispute import Dispute, DisputeEvidence
 from app.models.reservation import Reservation
 from app.models.space import Space
 from app.models.user import User
+from app.models.provider import Provider
 from app.constants import DisputeStatus, ReservationStatus, DISPUTE_WINDOW_DAYS
 from app.exceptions import NotFoundError, ForbiddenError, DomainException
 from app.utils.time_utils import now_chile
@@ -39,7 +40,10 @@ async def open_dispute(
         raise DomainException(f"El plazo para reclamar venció ({DISPUTE_WINDOW_DAYS} días tras la reserva)")
 
     existing = (await session.execute(
-        select(Dispute).where(Dispute.reservation_id == reservation_id)
+        select(Dispute).where(
+            Dispute.reservation_id == reservation_id,
+            Dispute.opened_by == client_id,
+        )
     )).scalar_one_or_none()
     if existing:
         raise DomainException("Ya existe una reclamación para esta reserva")
@@ -71,6 +75,75 @@ async def open_dispute(
     await session.commit()
     await session.refresh(dispute)
     logger.info("dispute_opened", dispute_id=str(dispute.id), reservation_id=str(reservation_id))
+    return dispute
+
+
+async def open_provider_dispute(
+    reservation_id: uuid.UUID,
+    provider_user_id: uuid.UUID,
+    reason: str,
+    files: list[UploadFile],
+    session: AsyncSession,
+) -> Dispute:
+    res = await session.get(Reservation, reservation_id)
+    if not res:
+        raise NotFoundError("Reserva")
+
+    # Verificar que la reserva pertenece a un espacio del anfitrión
+    space = await session.get(Space, res.space_id)
+    if not space:
+        raise NotFoundError("Espacio")
+    provider = (await session.execute(
+        select(Provider).where(Provider.user_id == provider_user_id)
+    )).scalar_one_or_none()
+    if not provider or str(space.provider_id) != str(provider.id):
+        raise ForbiddenError("No eres el anfitrión de este espacio")
+
+    if res.status != ReservationStatus.FINISHED:
+        raise DomainException("Solo puedes reclamar reservas completadas")
+
+    end_date = res.end_date or res.date
+    end_dt = datetime.combine(end_date, res.end_time).replace(tzinfo=timezone.utc)
+    deadline = end_dt + timedelta(days=DISPUTE_WINDOW_DAYS)
+    if now_chile().replace(tzinfo=timezone.utc) > deadline:
+        raise DomainException(f"El plazo para reclamar venció ({DISPUTE_WINDOW_DAYS} días tras la reserva)")
+
+    existing = (await session.execute(
+        select(Dispute).where(
+            Dispute.reservation_id == reservation_id,
+            Dispute.opened_by == provider_user_id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise DomainException("Ya abriste una reclamación para esta reserva")
+
+    dispute = Dispute(
+        id=uuid.uuid4(),
+        reservation_id=reservation_id,
+        opened_by=provider_user_id,
+        reason=reason,
+        status=DisputeStatus.OPEN,
+    )
+    session.add(dispute)
+    await session.flush()
+
+    from app.services.storage_service import upload_file
+    now = now_chile()
+    for f in files:
+        if not f.content_type or not f.content_type.startswith("image/"):
+            continue
+        url = await upload_file(f, folder=f"disputes/{dispute.id}")
+        session.add(DisputeEvidence(
+            id=uuid.uuid4(),
+            dispute_id=dispute.id,
+            url=url,
+            filename=f.filename,
+            uploaded_at=now,
+        ))
+
+    await session.commit()
+    await session.refresh(dispute)
+    logger.info("provider_dispute_opened", dispute_id=str(dispute.id), reservation_id=str(reservation_id))
     return dispute
 
 

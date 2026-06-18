@@ -34,6 +34,19 @@ async def provider_disputes(
     return {"success": True, "data": items}
 
 
+@router.post("/reservations/{reservation_id}/provider-dispute", response_model=dict, status_code=201,
+             summary="Anfitrión abre reclamación contra cliente por una reserva completada")
+async def open_provider_dispute(
+    reservation_id: uuid.UUID,
+    reason: str = Form(..., min_length=20),
+    files: list[UploadFile] = File(default=[]),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(UserRole.PROVIDER, UserRole.ADMIN)),
+):
+    dispute = await dispute_service.open_provider_dispute(reservation_id, user.id, reason, files, session)
+    return {"success": True, "data": {"id": str(dispute.id), "status": dispute.status}}
+
+
 @router.get("/disputes/my", response_model=dict, summary="Mis reclamaciones")
 async def my_disputes(
     session: AsyncSession = Depends(get_session),
