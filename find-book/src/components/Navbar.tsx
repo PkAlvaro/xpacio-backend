@@ -3,9 +3,7 @@ import { Building2, Menu, User, LayoutDashboard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useMe } from "@/hooks/useAuth";
-import { clearTokens } from "@/lib/api";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMe, useLogout } from "@/hooks/useAuth";
 
 const links = [
   { to: "/", label: "Inicio" },
@@ -17,15 +15,13 @@ export const Navbar = () => {
   const [open, setOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const { data: user, isLoading } = useMe();
+  const logoutMutation = useLogout();
 
   const logout = () => {
-    clearTokens();
-    qc.clear();
-    navigate("/");
     setOpen(false);
     setUserMenuOpen(false);
+    logoutMutation.mutate(undefined, { onSuccess: () => navigate("/") });
   };
 
   return (

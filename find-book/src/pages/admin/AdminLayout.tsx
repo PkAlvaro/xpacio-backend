@@ -2,8 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Building2, Users, CalendarCheck, AlertTriangle, Settings, LogOut, ChevronRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useMe } from "@/hooks/useAuth";
-import { clearTokens } from "@/lib/api";
+import { useMe, useLogout } from "@/hooks/useAuth";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -26,7 +25,8 @@ export default function AdminLayout() {
     return null;
   }
 
-  const logout = () => { clearTokens(); navigate("/login"); };
+  const logoutMutation = useLogout();
+  const logout = () => logoutMutation.mutate(undefined, { onSuccess: () => navigate("/login") });
 
   return (
     <div className="min-h-screen bg-background flex">
